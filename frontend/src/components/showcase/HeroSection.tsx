@@ -173,7 +173,7 @@ export function HeroSection({ onScrollNext }: HeroSectionProps) {
       <div className="pointer-events-none relative z-20 my-auto flex flex-col items-center text-center">
         <h1
           className="mt-6 max-w-4xl font-condensed uppercase leading-[0.88] tracking-tight text-stone-900 drop-shadow-[0_1px_16px_rgba(246,243,236,0.9)]"
-          style={{ fontSize: 'clamp(3.25rem, 11vw, 9.5rem)' }}
+          style={{ fontSize: 'clamp(2.25rem, 11vw, 5rem)' }}
         >
           {headlineLines.map((line, idx) => (
             <span key={`${idx}-${line}`} className="block overflow-hidden py-0.5">

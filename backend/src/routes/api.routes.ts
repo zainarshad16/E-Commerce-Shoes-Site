@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { Prisma } from '@prisma/client';
@@ -137,18 +138,84 @@ const memoryUsers: ManagedUserRecord[] = [
   })),
 ];
 
-const userProfileMeta = new Map<
-  string,
-  {
-    phone?: string;
-    address?: string;
-    city?: string;
-    state?: string;
-    zipCode?: string;
-    authProvider?: 'email' | 'google';
-    lastLoginAt?: string;
+interface UserProfileMetaEntry {
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  authProvider?: 'email' | 'google';
+  lastLoginAt?: string;
+}
+
+const USER_PROFILE_META_PATH = path.resolve(
+  __dirname,
+  '../../data/user-profile-meta.json'
+);
+
+const userProfileMeta = new Map<string, UserProfileMetaEntry>();
+
+function loadUserProfileMeta() {
+  try {
+    if (!fs.existsSync(USER_PROFILE_META_PATH)) return;
+    const raw = fs.readFileSync(USER_PROFILE_META_PATH, 'utf8');
+    const parsed = JSON.parse(raw) as Record<string, UserProfileMetaEntry>;
+    if (parsed && typeof parsed === 'object') {
+      for (const [k, v] of Object.entries(parsed)) {
+        if (v && typeof v === 'object') {
+          userProfileMeta.set(k.toLowerCase(), v);
+        }
+      }
+    }
+  } catch {
+    // Ignore corrupt or missing local metadata file
   }
->();
+}
+
+function persistUserProfileMeta() {
+  try {
+    const dir = path.dirname(USER_PROFILE_META_PATH);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const obj: Record<string, UserProfileMetaEntry> = {};
+    for (const [k, v] of userProfileMeta.entries()) {
+      obj[k] = v;
+    }
+    fs.writeFileSync(
+      USER_PROFILE_META_PATH,
+      JSON.stringify(obj, null, 2),
+      'utf8'
+    );
+  } catch {
+    // Non-fatal persistence fallback
+  }
+}
+
+loadUserProfileMeta();
+
+const SEED_OR_TEST_EMAILS = new Set([
+  'hannah.lindstrom@gmail.com',
+  'tariq.mahmood@gmail.com',
+  'guest.reader@gmail.com',
+  'test.google@gmail.com',
+  'verify_1794748606038@aether-test.io',
+]);
+
+function getLocalGitIdentity(): { email: string; name: string } | null {
+  try {
+    const email = execSync('git config user.email', { encoding: 'utf8' })
+      .trim()
+      .toLowerCase();
+    if (!email || !email.includes('@')) return null;
+    const name =
+      execSync('git config user.name', { encoding: 'utf8' }).trim() ||
+      email.split('@')[0];
+    return { email, name };
+  } catch {
+    return null;
+  }
+}
 
 function serializeManagedUser(user: ManagedUserRecord) {
   const emailLower = user.email.toLowerCase();
@@ -168,7 +235,9 @@ function serializeManagedUser(user: ManagedUserRecord) {
     city: meta?.city ?? user.city ?? '',
     state: meta?.state ?? user.state ?? '',
     zipCode: meta?.zipCode ?? user.zipCode ?? '',
-    authProvider: meta?.authProvider ?? user.authProvider,
+    authProvider:
+      meta?.authProvider ??
+      (emailLower.endsWith('@gmail.com') ? 'google' : user.authProvider),
     createdAt: user.createdAt,
     lastLoginAt: meta?.lastLoginAt ?? user.lastLoginAt,
     orderCount: matchingOrders.length,
@@ -192,6 +261,7 @@ let memoryContactSettings = {
     'We use essential cookies for bag & checkout security, Cloudflare edge protection, and optional analytics to refine your showroom experience.',
   cloudflareAnalyticsToken: '',
   cloudflareZoneDomain: 'ateliervance.com',
+  googleClientId: '',
   updatedAt: new Date().toISOString(),
 };
 
@@ -232,6 +302,7 @@ router.post('/auth/register', async (req: Request, res: Response) => {
     authProvider: 'email',
     lastLoginAt: nowIso,
   });
+  persistUserProfileMeta();
 
   const dbReady = await isDbConnected();
   if (dbReady && prisma) {
@@ -339,6 +410,7 @@ router.post('/auth/login', async (req: Request, res: Response) => {
 
     const prevMeta = userProfileMeta.get(email) || {};
     userProfileMeta.set(email, { ...prevMeta, lastLoginAt: nowIso });
+    persistUserProfileMeta();
 
     const token = signAuthToken({
       userId: user.id,
@@ -392,6 +464,70 @@ router.post('/auth/login', async (req: Request, res: Response) => {
   res.status(401).json({ error: 'Invalid credentials.' });
 });
 
+router.get('/auth/google/current', async (_req: Request, res: Response) => {
+  const dbReady = await isDbConnected();
+  if (dbReady && prisma) {
+    const dbUsers = await prisma.user.findMany({
+      orderBy: { updatedAt: 'desc' },
+    });
+    const activeGoogleUser = dbUsers.find((u) => {
+      const emailLower = u.email.toLowerCase();
+      if (SEED_OR_TEST_EMAILS.has(emailLower)) return false;
+      const meta = userProfileMeta.get(emailLower);
+      return meta?.authProvider === 'google' || emailLower.endsWith('@gmail.com');
+    });
+    if (activeGoogleUser) {
+      res.json({
+        account: {
+          email: activeGoogleUser.email,
+          name: activeGoogleUser.name,
+          role: activeGoogleUser.role,
+        },
+      });
+      return;
+    }
+  }
+
+  const memMatch = [...memoryUsers]
+    .sort((a, b) => b.lastLoginAt.localeCompare(a.lastLoginAt))
+    .find((u) => {
+      const emailLower = u.email.toLowerCase();
+      if (SEED_OR_TEST_EMAILS.has(emailLower)) return false;
+      const meta = userProfileMeta.get(emailLower);
+      return (
+        meta?.authProvider === 'google' ||
+        u.authProvider === 'google' ||
+        emailLower.endsWith('@gmail.com')
+      );
+    });
+  if (memMatch) {
+    res.json({
+      account: {
+        email: memMatch.email,
+        name: memMatch.name,
+        role: memMatch.role,
+      },
+    });
+    return;
+  }
+
+  if (process.env.NODE_ENV !== 'production') {
+    const gitIdentity = getLocalGitIdentity();
+    if (gitIdentity) {
+      res.json({
+        account: {
+          email: gitIdentity.email,
+          name: gitIdentity.name,
+          role: 'CUSTOMER',
+        },
+      });
+      return;
+    }
+  }
+
+  res.json({ account: null });
+});
+
 router.post('/auth/google', async (req: Request, res: Response) => {
   const rawEmail =
     typeof req.body?.email === 'string'
@@ -420,6 +556,7 @@ router.post('/auth/google', async (req: Request, res: Response) => {
     authProvider: 'google',
     lastLoginAt: nowIso,
   });
+  persistUserProfileMeta();
 
   const dbReady = await isDbConnected();
   if (dbReady && prisma) {
@@ -435,6 +572,14 @@ router.post('/auth/google', async (req: Request, res: Response) => {
           name: displayName,
           passwordHash: randomHash,
           role: 'CUSTOMER',
+        },
+      });
+    } else {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          ...(rawName.length >= 2 ? { name: rawName } : {}),
+          updatedAt: new Date(),
         },
       });
     }
@@ -477,6 +622,9 @@ router.post('/auth/google', async (req: Request, res: Response) => {
     };
     memoryUsers.push(localUser);
   } else {
+    if (rawName.length >= 2) {
+      localUser.name = rawName;
+    }
     localUser.lastLoginAt = nowIso;
     localUser.authProvider = 'google';
   }
@@ -536,7 +684,9 @@ router.get(
           city: meta?.city || '',
           state: meta?.state || '',
           zipCode: meta?.zipCode || '',
-          authProvider: meta?.authProvider || 'email',
+          authProvider:
+            meta?.authProvider ||
+            (emailLower.endsWith('@gmail.com') ? 'google' : 'email'),
           createdAt: u.createdAt.toISOString(),
           lastLoginAt: meta?.lastLoginAt || u.updatedAt.toISOString(),
           orderCount: matchingOrders.length,
@@ -617,6 +767,7 @@ router.put(
         state: body.state ?? prevMeta.state,
         zipCode: body.zipCode ?? prevMeta.zipCode,
       });
+      persistUserProfileMeta();
 
       res.json({
         user: serializeManagedUser({
@@ -662,6 +813,7 @@ router.put(
       authProvider: userRecord.authProvider,
       lastLoginAt: userRecord.lastLoginAt,
     });
+    persistUserProfileMeta();
 
     res.json({ user: serializeManagedUser(userRecord) });
   }
@@ -724,6 +876,13 @@ router.put(
           passwordHash,
         },
       });
+
+      const prevMeta = userProfileMeta.get(dbUser.email.toLowerCase()) || {};
+      userProfileMeta.set(updated.email.toLowerCase(), {
+        ...prevMeta,
+        lastLoginAt: new Date().toISOString(),
+      });
+      persistUserProfileMeta();
 
       const token = signAuthToken({
         userId: updated.id,
@@ -835,6 +994,10 @@ router.put(
           : memoryContactSettings.cloudflareAnalyticsToken,
       cloudflareZoneDomain:
         body.cloudflareZoneDomain?.trim() || memoryContactSettings.cloudflareZoneDomain,
+      googleClientId:
+        typeof body.googleClientId === 'string'
+          ? body.googleClientId.trim()
+          : memoryContactSettings.googleClientId,
       updatedAt: new Date().toISOString(),
     };
 

@@ -209,6 +209,7 @@ export interface SiteContactSettings {
   cookieBannerDescription?: string;
   cloudflareAnalyticsToken?: string;
   cloudflareZoneDomain?: string;
+  googleClientId?: string;
   updatedAt?: string;
 }
 

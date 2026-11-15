@@ -846,6 +846,7 @@ export function AdminStudioClient() {
     authToken: storeAuthToken,
     authUser: storeAuthUser,
     login: storeLogin,
+    loginWithGoogle: storeLoginWithGoogle,
     updateAuthSession,
     logout: storeLogout,
     contactSettings,
@@ -1263,6 +1264,145 @@ export function AdminStudioClient() {
       }
       setLoginPassword('');
       notify(`Signed in as ${result.user.name} (${result.user.role})`);
+    } finally {
+      setAuthSubmitting(false);
+    }
+  }
+
+  async function handleGoogleAdminLogin() {
+    setAuthError(null);
+    setAuthSubmitting(true);
+    try {
+      let profile: { email: string; name: string; googleId?: string } | null =
+        null;
+
+      const clientId =
+        process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.trim() ||
+        contactSettings.googleClientId?.trim() ||
+        '';
+
+      if (clientId && typeof window !== 'undefined') {
+        try {
+          const gsi = (
+            window as Window & {
+              google?: {
+                accounts?: {
+                  oauth2?: {
+                    initTokenClient: (cfg: {
+                      client_id: string;
+                      scope: string;
+                      prompt?: string;
+                      callback: (resp: { access_token?: string }) => void;
+                    }) => { requestAccessToken: () => void };
+                  };
+                };
+              };
+            }
+          ).google?.accounts?.oauth2;
+          if (gsi) {
+            profile = await new Promise((resolve) => {
+              const client = gsi.initTokenClient({
+                client_id: clientId,
+                scope: 'openid email profile',
+                prompt: 'select_account',
+                callback: async (tokenResp) => {
+                  if (!tokenResp.access_token) {
+                    resolve(null);
+                    return;
+                  }
+                  try {
+                    const infoRes = await fetch(
+                      'https://www.googleapis.com/oauth2/v3/userinfo',
+                      {
+                        headers: {
+                          Authorization: `Bearer ${tokenResp.access_token}`,
+                        },
+                      }
+                    );
+                    const info = (await infoRes.json()) as {
+                      email?: string;
+                      name?: string;
+                      sub?: string;
+                    };
+                    if (info.email) {
+                      resolve({
+                        email: info.email,
+                        name: info.name || info.email.split('@')[0],
+                        googleId: info.sub,
+                      });
+                      return;
+                    }
+                  } catch {
+                    // Fallback below
+                  }
+                  resolve(null);
+                },
+              });
+              client.requestAccessToken();
+            });
+          }
+        } catch {
+          // Fallback to backend active Google account detection
+        }
+      }
+
+      if (!profile && typeof window !== 'undefined') {
+        try {
+          const saved = localStorage.getItem('atelier_google_current_account_v1');
+          if (saved) {
+            const parsed = JSON.parse(saved) as {
+              email?: string;
+              name?: string;
+              googleId?: string;
+            };
+            if (parsed.email && parsed.email.includes('@')) {
+              profile = {
+                email: parsed.email,
+                name: parsed.name || parsed.email.split('@')[0],
+                googleId: parsed.googleId,
+              };
+            }
+          }
+        } catch {
+          // Ignore storage error
+        }
+      }
+
+      if (!profile) {
+        const res = await fetch(`${API_BASE_URL}/auth/google/current`, {
+          cache: 'no-store',
+        });
+        if (res.ok) {
+          const data = (await res.json()) as {
+            account?: { email: string; name: string } | null;
+          };
+          if (data.account?.email) {
+            profile = data.account;
+          }
+        }
+      }
+
+      if (!profile) {
+        setAuthError(
+          'No active Google account session detected. Please sign in with your staff email or connect your Google account on /login.'
+        );
+        return;
+      }
+
+      const result = await storeLoginWithGoogle(profile);
+      if (!result.ok || !result.user) {
+        setAuthError(result.error || 'Google authentication failed.');
+        return;
+      }
+      if (result.user.role !== 'ADMIN' && result.user.role !== 'EDITOR') {
+        storeLogout();
+        setAuthError(
+          `Access denied for ${result.user.email}: administrator or editor role is required.`
+        );
+        return;
+      }
+
+      notify(`Signed in via Google as ${result.user.name} (${result.user.role})`);
     } finally {
       setAuthSubmitting(false);
     }
@@ -2138,6 +2278,37 @@ export function AdminStudioClient() {
               {authSubmitting ? 'VERIFYING CREDENTIALS...' : 'SIGN IN TO ADMIN'}
             </button>
           </form>
+          <div className="mt-4 flex items-center gap-3 font-mono text-[10px] uppercase tracking-wider text-[#A39A90]">
+            <span className="h-px flex-1 bg-[#2A231E]" />
+            <span>or</span>
+            <span className="h-px flex-1 bg-[#2A231E]" />
+          </div>
+          <button
+            type="button"
+            disabled={authSubmitting}
+            onClick={handleGoogleAdminLogin}
+            className="mt-4 flex w-full items-center justify-center gap-2.5 rounded-full border border-[#2A231E] bg-[#0F0D0C] py-3 text-xs font-semibold text-[#F7F3ED] transition hover:border-amber-400/50 hover:bg-[#1E1916] disabled:opacity-60"
+          >
+            <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="#4285F4"
+                d="M23.745 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-8.97Z"
+              />
+              <path
+                fill="#34A853"
+                d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24Z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14Z"
+              />
+              <path
+                fill="#EA4335"
+                d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z"
+              />
+            </svg>
+            <span>Continue with Google</span>
+          </button>
           <div className="mt-6 flex items-center justify-between border-t border-[#2A231E] pt-4 text-xs text-[#A39A90]">
             <span>Customer account?</span>
             <Link href="/login" className="font-mono text-[11px] uppercase tracking-wider text-amber-300 hover:underline">

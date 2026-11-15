@@ -11,4 +11,5 @@ node_modules/
 **/dist/
 **/.open-next/
 backend/uploads/
+backend/data/
 **/*.tsbuildinfo

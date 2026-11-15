@@ -15,6 +15,7 @@ import {
   User as UserIcon,
   X,
 } from 'lucide-react';
+import { API_BASE_URL } from '@/lib/config';
 import { useStore } from '@/context/StoreContext';
 
 type AuthMode = 'login' | 'register';
@@ -27,6 +28,12 @@ interface CurrentGoogleAccount {
 }
 
 const GOOGLE_CURRENT_ACCOUNT_KEY = 'atelier_google_current_account_v1';
+const PLACEHOLDER_SEED_EMAILS = new Set([
+  'hannah.lindstrom@gmail.com',
+  'tariq.mahmood@gmail.com',
+  'guest.reader@gmail.com',
+  'test.google@gmail.com',
+]);
 
 interface GoogleAccountsOAuth2 {
   initTokenClient: (config: {
@@ -402,7 +409,14 @@ export function LoginFormClient() {
   const initialMode: AuthMode =
     searchParams.get('mode') === 'register' ? 'register' : 'login';
 
-  const { authUser, login, loginWithGoogle, register, logout } = useStore();
+  const {
+    authUser,
+    login,
+    loginWithGoogle,
+    register,
+    logout,
+    contactSettings,
+  } = useStore();
 
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [carpetStage, setCarpetStage] = useState<CarpetStage>('side');
@@ -429,19 +443,46 @@ export function LoginFormClient() {
   const [googleEmail, setGoogleEmail] = useState('');
   const [googleBusy, setGoogleBusy] = useState(false);
 
-  // Load only the current user's own Google session cached on this browser (if any)
+  // Load the current browser's active Google account and auto-detect from backend session
   useEffect(() => {
+    let hasValidLocal = false;
     try {
       const saved = localStorage.getItem(GOOGLE_CURRENT_ACCOUNT_KEY);
       if (saved) {
         const parsed = JSON.parse(saved) as CurrentGoogleAccount;
-        if (parsed.email) {
-          setCurrentGoogleAccount(parsed);
+        const emailLower = parsed.email?.trim().toLowerCase();
+        if (emailLower && !PLACEHOLDER_SEED_EMAILS.has(emailLower)) {
+          setCurrentGoogleAccount({
+            email: emailLower,
+            name: parsed.name,
+            googleId: parsed.googleId,
+          });
+          hasValidLocal = true;
+        } else if (emailLower && PLACEHOLDER_SEED_EMAILS.has(emailLower)) {
+          localStorage.removeItem(GOOGLE_CURRENT_ACCOUNT_KEY);
         }
       }
     } catch {
       // Ignore storage errors
     }
+
+    let cancelled = false;
+    fetch(`${API_BASE_URL}/auth/google/current`, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { account?: CurrentGoogleAccount | null } | null) => {
+        if (!cancelled && data?.account?.email && !hasValidLocal) {
+          setCurrentGoogleAccount({
+            email: data.account.email,
+            name: data.account.name,
+          });
+        }
+      })
+      .catch(() => {
+        // Offline / backend unreachable
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const stageTimersRef = useRef<number[]>([]);
@@ -575,18 +616,29 @@ export function LoginFormClient() {
 
     setGoogleModalOpen(false);
     setShowSwitchGoogleForm(false);
+    if (
+      (res.user?.role === 'ADMIN' || res.user?.role === 'EDITOR') &&
+      !searchParams.get('redirect')
+    ) {
+      router.push('/admin');
+      return;
+    }
     router.push(redirectTarget);
   };
 
   /**
    * Fetches the user's current active Google account:
-   * 1. If `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is configured, launches native Google Identity OAuth
+   * 1. If Google Client ID is configured, launches native Google Identity OAuth (`select_account`)
    *    and reads the active Google user's profile from userinfo.
-   * 2. Otherwise signs in with this browser's current active Google account or prompts for their own email.
+   * 2. Otherwise signs in immediately with the detected active Google account in 1 click,
+   *    or opens the email input dialog if none is detected yet.
    */
   const handleContinueWithGoogle = async () => {
     setError('');
-    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+    const clientId =
+      process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.trim() ||
+      contactSettings.googleClientId?.trim() ||
+      '';
 
     if (clientId) {
       setGoogleBusy(true);
@@ -607,11 +659,20 @@ export function LoginFormClient() {
           const client = oauth2.initTokenClient({
             client_id: clientId,
             scope: 'openid email profile',
-            prompt: '',
+            prompt: 'select_account',
             callback: async (tokenResp) => {
               if (!tokenResp.access_token) {
                 setGoogleBusy(false);
-                setGoogleModalOpen(true);
+                if (currentGoogleAccount) {
+                  await handleGoogleAuth(
+                    currentGoogleAccount.email,
+                    currentGoogleAccount.name,
+                    currentGoogleAccount.googleId
+                  );
+                } else {
+                  setShowSwitchGoogleForm(true);
+                  setGoogleModalOpen(true);
+                }
                 return;
               }
               try {
@@ -636,6 +697,7 @@ export function LoginFormClient() {
                 // Fallback below
               }
               setGoogleBusy(false);
+              setShowSwitchGoogleForm(true);
               setGoogleModalOpen(true);
             },
           });
@@ -643,12 +705,21 @@ export function LoginFormClient() {
           return;
         }
       } catch {
-        // Fallback to single-account dialog if GSI blocked offline
+        // Fallback if GSI is blocked offline
       }
       setGoogleBusy(false);
     }
 
-    setShowSwitchGoogleForm(!currentGoogleAccount);
+    if (currentGoogleAccount) {
+      await handleGoogleAuth(
+        currentGoogleAccount.email,
+        currentGoogleAccount.name,
+        currentGoogleAccount.googleId
+      );
+      return;
+    }
+
+    setShowSwitchGoogleForm(true);
     setGoogleModalOpen(true);
   };
 
@@ -707,7 +778,7 @@ export function LoginFormClient() {
             <ArrowRight className="h-3.5 w-3.5 text-[#8C4A27]" />
           </Link>
 
-          {authUser.role === 'ADMIN' && (
+          {(authUser.role === 'ADMIN' || authUser.role === 'EDITOR') && (
             <Link
               href="/admin"
               className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-[#8C4A27]/30 bg-[#8C4A27]/8 px-5 text-xs font-semibold text-[#8C4A27] transition hover:bg-[#8C4A27] hover:text-white"
@@ -902,32 +973,56 @@ export function LoginFormClient() {
                   </div>
 
                   {/* Google OAuth Button */}
-                  <button
-                    type="button"
-                    disabled={googleBusy}
-                    onClick={handleContinueWithGoogle}
-                    className="mt-3.5 flex h-9 w-full items-center justify-center gap-2.5 rounded-full border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-60"
-                  >
-                    <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
-                      <path
-                        fill="#4285F4"
-                        d="M23.745 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-8.97Z"
-                      />
-                      <path
-                        fill="#34A853"
-                        d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24Z"
-                      />
-                      <path
-                        fill="#FBBC05"
-                        d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14Z"
-                      />
-                      <path
-                        fill="#EA4335"
-                        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z"
-                      />
-                    </svg>
-                    <span>Continue with Google</span>
-                  </button>
+                  <div className="mt-3.5 space-y-1.5">
+                    <button
+                      type="button"
+                      disabled={googleBusy}
+                      onClick={handleContinueWithGoogle}
+                      className="flex h-9 w-full items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          fill="#4285F4"
+                          d="M23.745 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-8.97Z"
+                        />
+                        <path
+                          fill="#34A853"
+                          d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24Z"
+                        />
+                        <path
+                          fill="#FBBC05"
+                          d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14Z"
+                        />
+                        <path
+                          fill="#EA4335"
+                          d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z"
+                        />
+                      </svg>
+                      <span className="truncate">
+                        {googleBusy
+                          ? 'Connecting Google...'
+                          : currentGoogleAccount
+                          ? `Continue as ${currentGoogleAccount.name}`
+                          : 'Continue with Google'}
+                      </span>
+                    </button>
+                    {currentGoogleAccount && (
+                      <div className="flex items-center justify-between px-2 text-[10px] text-slate-500">
+                        <span className="truncate">{currentGoogleAccount.email}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setError('');
+                            setShowSwitchGoogleForm(true);
+                            setGoogleModalOpen(true);
+                          }}
+                          className="shrink-0 font-semibold text-[#3B82F6] hover:underline"
+                        >
+                          Use another Google account
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
                   <form onSubmit={handleSubmit} className="mt-3.5 space-y-2.5">
                     {mode === 'register' && (
@@ -1198,6 +1293,12 @@ export function LoginFormClient() {
               </button>
             </div>
 
+            {error && (
+              <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                {error}
+              </div>
+            )}
+
             {currentGoogleAccount && !showSwitchGoogleForm ? (
               <div className="mt-4 space-y-3">
                 <p className="text-[11px] font-medium text-stone-500">
@@ -1252,11 +1353,10 @@ export function LoginFormClient() {
                 >
                   <div>
                     <label className="mb-1 block text-[11px] font-medium text-stone-600">
-                      Your Name
+                      Your Name (optional)
                     </label>
                     <input
                       type="text"
-                      required
                       value={googleName}
                       onChange={(e) => setGoogleName(e.target.value)}
                       placeholder="Your full name"
