@@ -1,6 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { getCollections, getProducts, getSiteSeoConfig } from '@/lib/api';
-import { buildCanonicalUrl } from '@/lib/seo';
+import { buildCanonicalUrl, resolveSafeSiteUrl } from '@/lib/seo';
 
 export const revalidate = 60;
 
@@ -11,8 +11,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     getCollections(),
   ]);
 
-  const siteUrl =
-    seoConfig.siteUrl || 'https://atelier-vance-storefront.vercel.app';
+  const siteUrl = resolveSafeSiteUrl(seoConfig.siteUrl);
   const now = new Date();
 
   const staticRoutes: MetadataRoute.Sitemap = [

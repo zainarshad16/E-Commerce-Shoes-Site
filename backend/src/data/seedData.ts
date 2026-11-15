@@ -143,11 +143,22 @@ function makeSizes(prefix: string, counts: number[]) {
   }));
 }
 
+function resolvePrimarySiteUrl(): string {
+  const candidates = (process.env.FRONTEND_URL || '')
+    .split(',')
+    .map((u) => u.trim().replace(/\/$/, ''))
+    .filter(Boolean);
+  return (
+    candidates.find((u) => !u.includes('localhost')) ||
+    candidates[0] ||
+    'https://atelier-vance-storefront.vercel.app'
+  );
+}
+
 export const INITIAL_SEO_CONFIG: SeedSiteSeoConfig = {
   id: 'seo-config-primary',
   siteName: 'ATELIER VANCE',
-  siteUrl:
-    process.env.FRONTEND_URL || 'https://atelier-vance-storefront.vercel.app',
+  siteUrl: resolvePrimarySiteUrl(),
   defaultMetaTitle: 'Atelier Vance | Handcrafted & Everyday Footwear',
   defaultMetaDescription:
     'Honest full-grain leather oxfords, brushed indigo suede mid-tops, and breathable everyday runners designed for lasting comfort.',

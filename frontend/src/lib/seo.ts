@@ -1,17 +1,40 @@
 import { ColorwayVariant, FaqItem, Product, SiteSeoConfig } from '@/types/cms';
 
+const FALLBACK_SITE_URL = 'https://atelier-vance-storefront.vercel.app';
+
+/**
+ * Normalizes a potentially comma-separated or malformed site URL into a single
+ * valid HTTP(S) origin so `new URL(...)` in metadata generation never throws.
+ */
+export function resolveSafeSiteUrl(raw?: string | null): string {
+  const candidates = (raw || '')
+    .split(',')
+    .map((item) => item.trim().replace(/\/$/, ''))
+    .filter(Boolean);
+  const preferred =
+    candidates.find((u) => !u.includes('localhost')) || candidates[0];
+  if (!preferred) return FALLBACK_SITE_URL;
+  try {
+    const parsed = new URL(preferred);
+    return parsed.origin;
+  } catch {
+    return FALLBACK_SITE_URL;
+  }
+}
+
 export function buildCanonicalUrl(siteUrl: string, pathname: string): string {
-  const base = siteUrl.replace(/\/$/, '');
+  const base = resolveSafeSiteUrl(siteUrl);
   const path = pathname.startsWith('/') ? pathname : `/${pathname}`;
   return path === '/' ? base : `${base}${path}`;
 }
 
 export function buildOrganizationSchema(seoConfig: SiteSeoConfig) {
+  const safeUrl = resolveSafeSiteUrl(seoConfig.siteUrl);
   return {
     '@context': 'https://schema.org',
     '@type': 'Organization',
     name: seoConfig.organizationSchemaJson.name || seoConfig.siteName,
-    url: seoConfig.siteUrl,
+    url: safeUrl,
     logo: seoConfig.organizationSchemaJson.logo,
     sameAs: seoConfig.organizationSchemaJson.sameAs,
     contactPoint: {
@@ -23,7 +46,7 @@ export function buildOrganizationSchema(seoConfig: SiteSeoConfig) {
 }
 
 export function buildWebSiteSchema(seoConfig: SiteSeoConfig) {
-  const base = seoConfig.siteUrl.replace(/\/$/, '');
+  const base = resolveSafeSiteUrl(seoConfig.siteUrl);
   return {
     '@context': 'https://schema.org',
     '@type': 'WebSite',

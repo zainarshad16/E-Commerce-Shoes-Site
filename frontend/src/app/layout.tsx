@@ -16,6 +16,7 @@ import {
 import {
   buildOrganizationSchema,
   buildWebSiteSchema,
+  resolveSafeSiteUrl,
 } from '@/lib/seo';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { StoreProvider } from '@/context/StoreContext';
@@ -62,10 +63,9 @@ const jetbrainsMono = JetBrains_Mono({
 
 export async function generateMetadata(): Promise<Metadata> {
   const seoConfig = await getSiteSeoConfig();
+  const safeSiteUrl = resolveSafeSiteUrl(seoConfig.siteUrl);
   return {
-    metadataBase: new URL(
-      seoConfig.siteUrl || 'https://atelier-vance-storefront.vercel.app'
-    ),
+    metadataBase: new URL(safeSiteUrl),
     title: {
       default: seoConfig.defaultMetaTitle,
       template: `%s`,
@@ -74,7 +74,7 @@ export async function generateMetadata(): Promise<Metadata> {
     openGraph: {
       title: seoConfig.defaultMetaTitle,
       description: seoConfig.defaultMetaDescription,
-      url: seoConfig.siteUrl,
+      url: safeSiteUrl,
       siteName: seoConfig.siteName,
       images: [{ url: seoConfig.defaultOgImage }],
       type: 'website',
