@@ -1279,32 +1279,57 @@ export function AdminStudioClient() {
       const clientId =
         process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.trim() ||
         contactSettings.googleClientId?.trim() ||
-        '';
+        '410827708760-5dd9s2sekl7vfro9gik90qf22irfetn5.apps.googleusercontent.com';
 
       if (clientId && typeof window !== 'undefined') {
         try {
-          const gsi = (
-            window as Window & {
-              google?: {
-                accounts?: {
-                  oauth2?: {
-                    initTokenClient: (cfg: {
-                      client_id: string;
-                      scope: string;
-                      prompt?: string;
-                      callback: (resp: { access_token?: string }) => void;
-                    }) => { requestAccessToken: () => void };
+          const getGsi = () =>
+            (
+              window as Window & {
+                google?: {
+                  accounts?: {
+                    oauth2?: {
+                      initTokenClient: (cfg: {
+                        client_id: string;
+                        scope: string;
+                        prompt?: string;
+                        callback: (resp: { access_token?: string }) => void;
+                        error_callback?: (err: { type?: string }) => void;
+                      }) => { requestAccessToken: () => void };
+                    };
                   };
                 };
-              };
-            }
-          ).google?.accounts?.oauth2;
+              }
+            ).google?.accounts?.oauth2;
+
+          if (!getGsi()) {
+            await new Promise<void>((resolve, reject) => {
+              const existing = document.querySelector<HTMLScriptElement>(
+                'script[src="https://accounts.google.com/gsi/client"]'
+              );
+              const script = existing || document.createElement('script');
+              script.addEventListener('load', () => resolve(), { once: true });
+              script.addEventListener(
+                'error',
+                () => reject(new Error('GSI failed')),
+                { once: true }
+              );
+              if (!existing) {
+                script.src = 'https://accounts.google.com/gsi/client';
+                script.async = true;
+                document.head.appendChild(script);
+              }
+            });
+          }
+
+          const gsi = getGsi();
           if (gsi) {
             profile = await new Promise((resolve) => {
               const client = gsi.initTokenClient({
                 client_id: clientId,
                 scope: 'openid email profile',
                 prompt: 'select_account',
+                error_callback: () => resolve(null),
                 callback: async (tokenResp) => {
                   if (!tokenResp.access_token) {
                     resolve(null);

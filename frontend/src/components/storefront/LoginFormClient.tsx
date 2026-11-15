@@ -90,8 +90,12 @@ interface GoogleAccountsOAuth2 {
     scope: string;
     prompt?: string;
     callback: (resp: { access_token?: string; error?: string }) => void;
+    error_callback?: (err: { type?: string; message?: string }) => void;
   }) => { requestAccessToken: () => void };
 }
+
+const DEFAULT_GOOGLE_CLIENT_ID =
+  '410827708760-5dd9s2sekl7vfro9gik90qf22irfetn5.apps.googleusercontent.com';
 
 declare global {
   interface Window {
@@ -550,6 +554,22 @@ export function LoginFormClient() {
     };
   }, []);
 
+  // Preload Google Identity Services script so popup triggers synchronously on click
+  useEffect(() => {
+    if (typeof document === 'undefined' || window.google?.accounts?.oauth2) {
+      return;
+    }
+    const existing = document.querySelector(
+      'script[src="https://accounts.google.com/gsi/client"]'
+    );
+    if (existing) return;
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+  }, []);
+
   const stageTimersRef = useRef<number[]>([]);
 
   const clearStageTimers = useCallback(() => {
@@ -702,62 +722,84 @@ export function LoginFormClient() {
     const clientId =
       process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.trim() ||
       contactSettings.googleClientId?.trim() ||
-      '';
+      DEFAULT_GOOGLE_CLIENT_ID;
+
+    const invokeGoogleOAuth = () => {
+      const oauth2 = window.google?.accounts?.oauth2;
+      if (!oauth2) return false;
+      const client = oauth2.initTokenClient({
+        client_id: clientId,
+        scope: 'openid email profile',
+        prompt: 'select_account',
+        callback: async (tokenResp) => {
+          if (!tokenResp.access_token) {
+            setGoogleBusy(false);
+            setShowSwitchGoogleForm(false);
+            setGoogleModalOpen(true);
+            return;
+          }
+          try {
+            const infoRes = await fetch(
+              'https://www.googleapis.com/oauth2/v3/userinfo',
+              {
+                headers: {
+                  Authorization: `Bearer ${tokenResp.access_token}`,
+                },
+              }
+            );
+            const info = (await infoRes.json()) as {
+              email?: string;
+              name?: string;
+              sub?: string;
+            };
+            if (info.email) {
+              await handleGoogleAuth(info.email, info.name || '', info.sub);
+              return;
+            }
+          } catch {
+            // Fallback below
+          }
+          setGoogleBusy(false);
+          setShowSwitchGoogleForm(false);
+          setGoogleModalOpen(true);
+        },
+        error_callback: () => {
+          setGoogleBusy(false);
+          setShowSwitchGoogleForm(false);
+          setGoogleModalOpen(true);
+        },
+      });
+      client.requestAccessToken();
+      return true;
+    };
 
     if (clientId) {
       setGoogleBusy(true);
+      // Trigger synchronously when GSI is already loaded so Chrome allows the popup
+      if (window.google?.accounts?.oauth2 && invokeGoogleOAuth()) {
+        return;
+      }
+
       try {
         if (!window.google?.accounts?.oauth2) {
           await new Promise<void>((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = 'https://accounts.google.com/gsi/client';
-            script.async = true;
-            script.onload = () => resolve();
-            script.onerror = () => reject(new Error('Google script failed'));
-            document.head.appendChild(script);
+            const existing = document.querySelector<HTMLScriptElement>(
+              'script[src="https://accounts.google.com/gsi/client"]'
+            );
+            const script = existing || document.createElement('script');
+            const onLoad = () => resolve();
+            const onError = () => reject(new Error('Google script failed'));
+            script.addEventListener('load', onLoad, { once: true });
+            script.addEventListener('error', onError, { once: true });
+            if (!existing) {
+              script.src = 'https://accounts.google.com/gsi/client';
+              script.async = true;
+              document.head.appendChild(script);
+            }
           });
         }
 
-        const oauth2 = window.google?.accounts?.oauth2;
-        if (oauth2) {
-          const client = oauth2.initTokenClient({
-            client_id: clientId,
-            scope: 'openid email profile',
-            prompt: 'select_account',
-            callback: async (tokenResp) => {
-              if (!tokenResp.access_token) {
-                setGoogleBusy(false);
-                setShowSwitchGoogleForm(false);
-                setGoogleModalOpen(true);
-                return;
-              }
-              try {
-                const infoRes = await fetch(
-                  'https://www.googleapis.com/oauth2/v3/userinfo',
-                  {
-                    headers: {
-                      Authorization: `Bearer ${tokenResp.access_token}`,
-                    },
-                  }
-                );
-                const info = (await infoRes.json()) as {
-                  email?: string;
-                  name?: string;
-                  sub?: string;
-                };
-                if (info.email) {
-                  await handleGoogleAuth(info.email, info.name || '', info.sub);
-                  return;
-                }
-              } catch {
-                // Fallback below
-              }
-              setGoogleBusy(false);
-              setShowSwitchGoogleForm(false);
-              setGoogleModalOpen(true);
-            },
-          });
-          client.requestAccessToken();
+        if (invokeGoogleOAuth()) {
           return;
         }
       } catch {
