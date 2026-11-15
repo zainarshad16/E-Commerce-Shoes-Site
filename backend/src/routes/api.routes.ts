@@ -202,16 +202,32 @@ const SEED_OR_TEST_EMAILS = new Set([
   'verify_1794748606038@aether-test.io',
 ]);
 
-function getLocalGitIdentity(): { email: string; name: string } | null {
+function getLocalGitIdentity(
+  knownNames: string[] = []
+): { email: string; name: string } | null {
   try {
     const email = execSync('git config user.email', { encoding: 'utf8' })
       .trim()
       .toLowerCase();
     if (!email || !email.includes('@')) return null;
-    const name =
-      execSync('git config user.name', { encoding: 'utf8' }).trim() ||
-      email.split('@')[0];
-    return { email, name };
+    const rawName = execSync('git config user.name', { encoding: 'utf8' }).trim();
+    const handle = (rawName || email.split('@')[0]).replace(/\d+$/, '').toLowerCase();
+    const matchedKnown = knownNames.find(
+      (n) =>
+        n.includes(' ') &&
+        n.toLowerCase().replace(/\s+/g, '') === handle
+    );
+    let resolvedName = matchedKnown || rawName || email.split('@')[0];
+    if (!matchedKnown && !resolvedName.includes(' ')) {
+      const stripped = resolvedName.replace(/\d+$/, '');
+      if (stripped.length >= 2) {
+        resolvedName = stripped
+          .replace(/([a-z])([A-Z])/g, '$1 $2')
+          .replace(/[._-]+/g, ' ')
+          .replace(/\b\w/g, (c) => c.toUpperCase());
+      }
+    }
+    return { email, name: resolvedName };
   } catch {
     return null;
   }
@@ -465,67 +481,82 @@ router.post('/auth/login', async (req: Request, res: Response) => {
 });
 
 router.get('/auth/google/current', async (_req: Request, res: Response) => {
+  const accounts: { email: string; name: string; role: string }[] = [];
+  const seen = new Set<string>();
+  const dbGoogleAccounts: { email: string; name: string; role: string }[] = [];
+  const knownNames: string[] = [];
+
   const dbReady = await isDbConnected();
   if (dbReady && prisma) {
     const dbUsers = await prisma.user.findMany({
       orderBy: { updatedAt: 'desc' },
     });
-    const activeGoogleUser = dbUsers.find((u) => {
+    for (const u of dbUsers) {
+      knownNames.push(u.name);
       const emailLower = u.email.toLowerCase();
-      if (SEED_OR_TEST_EMAILS.has(emailLower)) return false;
+      if (SEED_OR_TEST_EMAILS.has(emailLower)) continue;
       const meta = userProfileMeta.get(emailLower);
-      return meta?.authProvider === 'google' || emailLower.endsWith('@gmail.com');
-    });
-    if (activeGoogleUser) {
-      res.json({
-        account: {
-          email: activeGoogleUser.email,
-          name: activeGoogleUser.name,
-          role: activeGoogleUser.role,
-        },
-      });
-      return;
+      if (meta?.authProvider === 'google' || emailLower.endsWith('@gmail.com')) {
+        dbGoogleAccounts.push({
+          email: emailLower,
+          name: u.name,
+          role: u.role,
+        });
+      }
     }
-  }
-
-  const memMatch = [...memoryUsers]
-    .sort((a, b) => b.lastLoginAt.localeCompare(a.lastLoginAt))
-    .find((u) => {
+  } else {
+    const sortedMem = [...memoryUsers].sort((a, b) =>
+      b.lastLoginAt.localeCompare(a.lastLoginAt)
+    );
+    for (const u of sortedMem) {
+      knownNames.push(u.name);
       const emailLower = u.email.toLowerCase();
-      if (SEED_OR_TEST_EMAILS.has(emailLower)) return false;
+      if (SEED_OR_TEST_EMAILS.has(emailLower)) continue;
       const meta = userProfileMeta.get(emailLower);
-      return (
+      if (
         meta?.authProvider === 'google' ||
         u.authProvider === 'google' ||
         emailLower.endsWith('@gmail.com')
-      );
-    });
-  if (memMatch) {
-    res.json({
-      account: {
-        email: memMatch.email,
-        name: memMatch.name,
-        role: memMatch.role,
-      },
-    });
-    return;
-  }
-
-  if (process.env.NODE_ENV !== 'production') {
-    const gitIdentity = getLocalGitIdentity();
-    if (gitIdentity) {
-      res.json({
-        account: {
-          email: gitIdentity.email,
-          name: gitIdentity.name,
-          role: 'CUSTOMER',
-        },
-      });
-      return;
+      ) {
+        dbGoogleAccounts.push({
+          email: emailLower,
+          name: u.name,
+          role: u.role,
+        });
+      }
     }
   }
 
-  res.json({ account: null });
+  if (process.env.NODE_ENV !== 'production') {
+    const gitIdentity = getLocalGitIdentity(knownNames);
+    if (
+      gitIdentity &&
+      gitIdentity.email.endsWith('@gmail.com') &&
+      !SEED_OR_TEST_EMAILS.has(gitIdentity.email)
+    ) {
+      const existingRole =
+        dbGoogleAccounts.find((a) => a.email === gitIdentity.email)?.role ||
+        'CUSTOMER';
+      seen.add(gitIdentity.email);
+      accounts.push({
+        email: gitIdentity.email,
+        name: gitIdentity.name,
+        role: existingRole,
+      });
+    }
+  }
+
+  for (const acc of dbGoogleAccounts) {
+    if (!seen.has(acc.email)) {
+      seen.add(acc.email);
+      accounts.push(acc);
+    }
+  }
+
+  res.json({
+    account: accounts[0] || null,
+    accounts,
+  });
 });
 
 router.post('/auth/google', async (req: Request, res: Response) => {

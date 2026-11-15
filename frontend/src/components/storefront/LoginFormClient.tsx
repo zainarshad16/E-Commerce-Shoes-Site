@@ -35,6 +35,55 @@ const PLACEHOLDER_SEED_EMAILS = new Set([
   'test.google@gmail.com',
 ]);
 
+function GoogleGIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="#4285F4"
+        d="M23.745 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-8.97Z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24Z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14Z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z"
+      />
+    </svg>
+  );
+}
+
+function mergeGoogleAccounts(
+  list: CurrentGoogleAccount[]
+): CurrentGoogleAccount[] {
+  const seen = new Set<string>();
+  const result: CurrentGoogleAccount[] = [];
+  for (const item of list) {
+    const emailLower = item.email?.trim().toLowerCase();
+    if (!emailLower || !emailLower.includes('@') || PLACEHOLDER_SEED_EMAILS.has(emailLower)) {
+      continue;
+    }
+    if (seen.has(emailLower)) continue;
+    seen.add(emailLower);
+    result.push({
+      email: emailLower,
+      name:
+        item.name?.trim() ||
+        emailLower
+          .split('@')[0]
+          .replace(/[._-]+/g, ' ')
+          .replace(/\b\w/g, (c) => c.toUpperCase()),
+      googleId: item.googleId,
+    });
+  }
+  return result;
+}
+
 interface GoogleAccountsOAuth2 {
   initTokenClient: (config: {
     client_id: string;
@@ -434,8 +483,11 @@ export function LoginFormClient() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Current Browser Google Account Sign-In State (no hardcoded accounts list)
+  // Current Browser Google Account Sign-In State
   const [googleModalOpen, setGoogleModalOpen] = useState(false);
+  const [googleAccounts, setGoogleAccounts] = useState<CurrentGoogleAccount[]>(
+    []
+  );
   const [currentGoogleAccount, setCurrentGoogleAccount] =
     useState<CurrentGoogleAccount | null>(null);
   const [showSwitchGoogleForm, setShowSwitchGoogleForm] = useState(false);
@@ -443,21 +495,22 @@ export function LoginFormClient() {
   const [googleEmail, setGoogleEmail] = useState('');
   const [googleBusy, setGoogleBusy] = useState(false);
 
-  // Load the current browser's active Google account and auto-detect from backend session
+  // Load the current browser's active Google accounts and backend-detected Google identities
   useEffect(() => {
-    let hasValidLocal = false;
+    let cachedAccount: CurrentGoogleAccount | null = null;
     try {
       const saved = localStorage.getItem(GOOGLE_CURRENT_ACCOUNT_KEY);
       if (saved) {
         const parsed = JSON.parse(saved) as CurrentGoogleAccount;
         const emailLower = parsed.email?.trim().toLowerCase();
         if (emailLower && !PLACEHOLDER_SEED_EMAILS.has(emailLower)) {
-          setCurrentGoogleAccount({
+          cachedAccount = {
             email: emailLower,
             name: parsed.name,
             googleId: parsed.googleId,
-          });
-          hasValidLocal = true;
+          };
+          setCurrentGoogleAccount(cachedAccount);
+          setGoogleAccounts([cachedAccount]);
         } else if (emailLower && PLACEHOLDER_SEED_EMAILS.has(emailLower)) {
           localStorage.removeItem(GOOGLE_CURRENT_ACCOUNT_KEY);
         }
@@ -469,14 +522,26 @@ export function LoginFormClient() {
     let cancelled = false;
     fetch(`${API_BASE_URL}/auth/google/current`, { cache: 'no-store' })
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { account?: CurrentGoogleAccount | null } | null) => {
-        if (!cancelled && data?.account?.email && !hasValidLocal) {
-          setCurrentGoogleAccount({
-            email: data.account.email,
-            name: data.account.name,
-          });
+      .then(
+        (
+          data: {
+            account?: CurrentGoogleAccount | null;
+            accounts?: CurrentGoogleAccount[];
+          } | null
+        ) => {
+          if (cancelled || !data) return;
+          const incoming = [
+            ...(Array.isArray(data.accounts) ? data.accounts : []),
+            ...(data.account ? [data.account] : []),
+            ...(cachedAccount ? [cachedAccount] : []),
+          ];
+          const merged = mergeGoogleAccounts(incoming);
+          if (merged.length > 0) {
+            setGoogleAccounts(merged);
+            setCurrentGoogleAccount(merged[0]);
+          }
         }
-      })
+      )
       .catch(() => {
         // Offline / backend unreachable
       });
@@ -601,10 +666,11 @@ export function LoginFormClient() {
 
     const sessionAcct: CurrentGoogleAccount = {
       email: normalizedEmail,
-      name: resolvedName,
+      name: res.user?.name || resolvedName,
       googleId: googleId || `google-${Date.now()}`,
     };
     setCurrentGoogleAccount(sessionAcct);
+    setGoogleAccounts((prev) => mergeGoogleAccounts([...prev, sessionAcct]));
     try {
       localStorage.setItem(
         GOOGLE_CURRENT_ACCOUNT_KEY,
@@ -627,11 +693,9 @@ export function LoginFormClient() {
   };
 
   /**
-   * Fetches the user's current active Google account:
-   * 1. If Google Client ID is configured, launches native Google Identity OAuth (`select_account`)
-   *    and reads the active Google user's profile from userinfo.
-   * 2. Otherwise signs in immediately with the detected active Google account in 1 click,
-   *    or opens the email input dialog if none is detected yet.
+   * Launches Google OAuth:
+   * 1. If a Google Cloud OAuth Web Client ID is configured, invokes native Google Identity OAuth (`select_account`).
+   * 2. Otherwise opens the dark Google v3 "Choose an account" chooser dialog matching accounts.google.com/v3.
    */
   const handleContinueWithGoogle = async () => {
     setError('');
@@ -663,16 +727,8 @@ export function LoginFormClient() {
             callback: async (tokenResp) => {
               if (!tokenResp.access_token) {
                 setGoogleBusy(false);
-                if (currentGoogleAccount) {
-                  await handleGoogleAuth(
-                    currentGoogleAccount.email,
-                    currentGoogleAccount.name,
-                    currentGoogleAccount.googleId
-                  );
-                } else {
-                  setShowSwitchGoogleForm(true);
-                  setGoogleModalOpen(true);
-                }
+                setShowSwitchGoogleForm(false);
+                setGoogleModalOpen(true);
                 return;
               }
               try {
@@ -697,7 +753,7 @@ export function LoginFormClient() {
                 // Fallback below
               }
               setGoogleBusy(false);
-              setShowSwitchGoogleForm(true);
+              setShowSwitchGoogleForm(false);
               setGoogleModalOpen(true);
             },
           });
@@ -710,16 +766,7 @@ export function LoginFormClient() {
       setGoogleBusy(false);
     }
 
-    if (currentGoogleAccount) {
-      await handleGoogleAuth(
-        currentGoogleAccount.email,
-        currentGoogleAccount.name,
-        currentGoogleAccount.googleId
-      );
-      return;
-    }
-
-    setShowSwitchGoogleForm(true);
+    setShowSwitchGoogleForm(googleAccounts.length === 0);
     setGoogleModalOpen(true);
   };
 
@@ -973,56 +1020,17 @@ export function LoginFormClient() {
                   </div>
 
                   {/* Google OAuth Button */}
-                  <div className="mt-3.5 space-y-1.5">
-                    <button
-                      type="button"
-                      disabled={googleBusy}
-                      onClick={handleContinueWithGoogle}
-                      className="flex h-9 w-full items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-60"
-                    >
-                      <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-                        <path
-                          fill="#4285F4"
-                          d="M23.745 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-8.97Z"
-                        />
-                        <path
-                          fill="#34A853"
-                          d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24Z"
-                        />
-                        <path
-                          fill="#FBBC05"
-                          d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14Z"
-                        />
-                        <path
-                          fill="#EA4335"
-                          d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z"
-                        />
-                      </svg>
-                      <span className="truncate">
-                        {googleBusy
-                          ? 'Connecting Google...'
-                          : currentGoogleAccount
-                          ? `Continue as ${currentGoogleAccount.name}`
-                          : 'Continue with Google'}
-                      </span>
-                    </button>
-                    {currentGoogleAccount && (
-                      <div className="flex items-center justify-between px-2 text-[10px] text-slate-500">
-                        <span className="truncate">{currentGoogleAccount.email}</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setError('');
-                            setShowSwitchGoogleForm(true);
-                            setGoogleModalOpen(true);
-                          }}
-                          className="shrink-0 font-semibold text-[#3B82F6] hover:underline"
-                        >
-                          Use another Google account
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  <button
+                    type="button"
+                    disabled={googleBusy}
+                    onClick={handleContinueWithGoogle}
+                    className="mt-3.5 flex h-9 w-full items-center justify-center gap-2.5 rounded-full border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    <GoogleGIcon className="h-4 w-4 shrink-0" />
+                    <span>
+                      {googleBusy ? 'Connecting Google...' : 'Continue with Google'}
+                    </span>
+                  </button>
 
                   <form onSubmit={handleSubmit} className="mt-3.5 space-y-2.5">
                     {mode === 'register' && (
@@ -1250,151 +1258,228 @@ export function LoginFormClient() {
         </div>
       </div>
 
-      {/* Current Device Google Account Sign-In Dialog */}
+      {/* Google v3 Dark Account Chooser Dialog (accounts.google.com/v3 aesthetic) */}
       {googleModalOpen && (
         <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-stone-950/50 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[90] flex flex-col items-center justify-center bg-[#0E0E0E]/95 p-4 text-[#E3E3E3]"
           role="dialog"
           aria-modal="true"
           aria-label="Sign in with Google"
         >
-          <div className="w-full max-w-sm rounded-3xl border border-stone-900/15 bg-white p-6 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-stone-900/10 pb-4">
-              <div className="flex items-center gap-2.5">
-                <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
-                  <path
-                    fill="#4285F4"
-                    d="M23.745 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-8.97Z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24Z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14Z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z"
-                  />
-                </svg>
-                <span className="text-sm font-semibold text-stone-900">
+          <div className="w-full max-w-[820px] overflow-hidden rounded-[28px] bg-[#1E1F20] shadow-[0_24px_64px_rgba(0,0,0,0.65)] ring-1 ring-white/10">
+            {/* Top Google Chrome Header */}
+            <div className="flex items-center justify-between border-b border-[#3C4043] px-7 py-3.5">
+              <div className="flex items-center gap-3">
+                <GoogleGIcon className="h-[18px] w-[18px]" />
+                <span className="text-sm font-normal text-[#E3E3E3]">
                   Sign in with Google
                 </span>
               </div>
               <button
                 type="button"
                 onClick={() => setGoogleModalOpen(false)}
-                className="rounded-full p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-800"
+                className="rounded-full p-1.5 text-[#C4C7C5] transition hover:bg-white/10 hover:text-white"
                 aria-label="Close Google sign-in"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            {error && (
-              <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                {error}
-              </div>
-            )}
-
-            {currentGoogleAccount && !showSwitchGoogleForm ? (
-              <div className="mt-4 space-y-3">
-                <p className="text-[11px] font-medium text-stone-500">
-                  Current active Google account in this browser:
-                </p>
-                <button
-                  type="button"
-                  disabled={googleBusy}
-                  onClick={() =>
-                    handleGoogleAuth(
-                      currentGoogleAccount.email,
-                      currentGoogleAccount.name,
-                      currentGoogleAccount.googleId
-                    )
-                  }
-                  className="flex w-full items-center gap-3 rounded-2xl border border-stone-900/15 bg-[#FAF8F4] px-4 py-3 text-left transition hover:border-[#3B82F6] hover:bg-sky-50/40 disabled:opacity-50"
-                >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#18181B] text-xs font-bold text-white">
-                    {currentGoogleAccount.name.slice(0, 2).toUpperCase()}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-semibold text-stone-900">
-                      Continue as {currentGoogleAccount.name}
-                    </p>
-                    <p className="truncate text-[11px] text-stone-500">
-                      {currentGoogleAccount.email}
-                    </p>
-                  </div>
-                  <ArrowRight className="h-4 w-4 text-stone-400" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowSwitchGoogleForm(true)}
-                  className="w-full text-center text-[11px] font-medium text-[#3B82F6] hover:underline"
-                >
-                  Use a different Google account
-                </button>
-              </div>
-            ) : (
-              <div className="mt-4">
-                <p className="mb-3 text-xs leading-relaxed text-stone-600">
-                  Enter your active Google email to authenticate this browser with
-                  Atelier Vance.
-                </p>
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    handleGoogleAuth(googleEmail, googleName);
-                  }}
-                  className="space-y-3"
-                >
-                  <div>
-                    <label className="mb-1 block text-[11px] font-medium text-stone-600">
-                      Your Name (optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={googleName}
-                      onChange={(e) => setGoogleName(e.target.value)}
-                      placeholder="Your full name"
-                      className="h-10 w-full rounded-xl border border-stone-900/15 bg-[#F6F3EC] px-3 text-xs text-stone-900 placeholder:text-stone-400 focus:border-[#3B82F6] focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-[11px] font-medium text-stone-600">
-                      Google Email Address
-                    </label>
-                    <input
-                      type="email"
-                      required
-                      value={googleEmail}
-                      onChange={(e) => setGoogleEmail(e.target.value)}
-                      placeholder="you@gmail.com"
-                      className="h-10 w-full rounded-xl border border-stone-900/15 bg-[#F6F3EC] px-3 text-xs text-stone-900 placeholder:text-stone-400 focus:border-[#3B82F6] focus:outline-none"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={googleBusy}
-                    className="btn-atelier h-10 w-full rounded-full text-xs font-semibold"
+            {/* Two-Column Google v3 Account Chooser Body */}
+            <div className="grid grid-cols-1 gap-8 px-7 py-8 sm:px-10 sm:py-10 md:grid-cols-12">
+              {/* Left Brand & Title Column */}
+              <div className="flex flex-col justify-start md:col-span-6">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#131314] ring-1 ring-white/10">
+                  <svg
+                    className="h-6 w-6 text-[#10B981]"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
                   >
-                    {googleBusy ? 'Connecting Google Account...' : 'Continue with Google'}
-                  </button>
-                  {currentGoogleAccount && (
-                    <button
-                      type="button"
-                      onClick={() => setShowSwitchGoogleForm(false)}
-                      className="w-full text-center text-[11px] text-stone-500 hover:text-stone-800"
-                    >
-                      Back to current Google account
-                    </button>
-                  )}
-                </form>
+                    <path d="M12 3v9m0 0-4-4m4 4 4-4" />
+                    <path d="M4 17l8-4 8 4-8 4-8-4Z" />
+                  </svg>
+                </div>
+                <h2 className="mt-6 font-sans text-3xl font-normal tracking-tight text-[#E3E3E3] sm:text-[36px]">
+                  {showSwitchGoogleForm ? 'Sign in' : 'Choose an account'}
+                </h2>
+                <p className="mt-2.5 text-base text-[#E3E3E3]">
+                  to continue to{' '}
+                  <span className="font-medium text-[#8AB4F8]">
+                    Atelier Vance
+                  </span>
+                </p>
               </div>
-            )}
+
+              {/* Right Account List / Sign-In Form Column */}
+              <div className="flex flex-col justify-center md:col-span-6">
+                {error && (
+                  <div className="mb-4 rounded-xl border border-red-400/30 bg-red-950/50 px-3.5 py-2.5 text-xs text-red-200">
+                    {error}
+                  </div>
+                )}
+
+                {googleAccounts.length > 0 && !showSwitchGoogleForm ? (
+                  <div>
+                    <div className="divide-y divide-[#3C4043] border-b border-[#3C4043]">
+                      {googleAccounts.map((acc, idx) => (
+                        <button
+                          key={acc.email}
+                          type="button"
+                          disabled={googleBusy}
+                          onClick={() =>
+                            handleGoogleAuth(acc.email, acc.name, acc.googleId)
+                          }
+                          className="flex w-full items-center gap-3.5 px-3 py-3.5 text-left transition hover:bg-[#2A2B2E] disabled:opacity-50"
+                        >
+                          <div
+                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${
+                              idx % 2 === 0 ? 'bg-[#00897B]' : 'bg-[#1A73E8]'
+                            }`}
+                          >
+                            {acc.name.slice(0, 1).toUpperCase()}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-[#E3E3E3]">
+                              {acc.name}
+                            </p>
+                            <p className="truncate text-xs text-[#C4C7C5]">
+                              {acc.email}
+                            </p>
+                          </div>
+                        </button>
+                      ))}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setError('');
+                          setShowSwitchGoogleForm(true);
+                        }}
+                        className="flex w-full items-center gap-3.5 px-3 py-3.5 text-left text-sm font-medium text-[#E3E3E3] transition hover:bg-[#2A2B2E]"
+                      >
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#C4C7C5]/40 text-[#C4C7C5]">
+                          <UserIcon className="h-4 w-4" />
+                        </div>
+                        <span>Use another account</span>
+                      </button>
+                    </div>
+
+                    <p className="mt-6 text-xs leading-relaxed text-[#C4C7C5]">
+                      Before using this app, you can review Atelier Vance&apos;s{' '}
+                      <Link
+                        href="/about"
+                        onClick={() => setGoogleModalOpen(false)}
+                        className="font-medium text-[#8AB4F8] hover:underline"
+                      >
+                        Privacy Policy
+                      </Link>{' '}
+                      and{' '}
+                      <Link
+                        href="/faq"
+                        onClick={() => setGoogleModalOpen(false)}
+                        className="font-medium text-[#8AB4F8] hover:underline"
+                      >
+                        Terms of Service
+                      </Link>
+                      .
+                    </p>
+                  </div>
+                ) : (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleGoogleAuth(googleEmail, googleName);
+                    }}
+                    className="space-y-4"
+                  >
+                    <p className="text-xs leading-relaxed text-[#C4C7C5]">
+                      Enter your Google email to continue to Atelier Vance.
+                    </p>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-[#C4C7C5]">
+                        Email or phone
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        value={googleEmail}
+                        onChange={(e) => setGoogleEmail(e.target.value)}
+                        placeholder="you@gmail.com"
+                        className="w-full rounded-lg border border-[#8E918F] bg-transparent px-3.5 py-3 text-sm text-[#E3E3E3] placeholder:text-[#8E918F] focus:border-[#8AB4F8] focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-[#C4C7C5]">
+                        Display Name (optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={googleName}
+                        onChange={(e) => setGoogleName(e.target.value)}
+                        placeholder="Your full name"
+                        className="w-full rounded-lg border border-[#8E918F] bg-transparent px-3.5 py-3 text-sm text-[#E3E3E3] placeholder:text-[#8E918F] focus:border-[#8AB4F8] focus:outline-none"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between pt-2">
+                      {googleAccounts.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setError('');
+                            setShowSwitchGoogleForm(false);
+                          }}
+                          className="text-xs font-medium text-[#8AB4F8] hover:underline"
+                        >
+                          Back to accounts
+                        </button>
+                      ) : (
+                        <span />
+                      )}
+                      <button
+                        type="submit"
+                        disabled={googleBusy}
+                        className="rounded-full bg-[#8AB4F8] px-6 py-2 text-xs font-semibold text-[#062E6F] transition hover:bg-[#A8C7FA] disabled:opacity-50"
+                      >
+                        {googleBusy ? 'Signing in...' : 'Next'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Outer Google v3 Footer Links */}
+          <div className="mt-4 flex w-full max-w-[820px] items-center justify-between px-2 text-xs text-[#C4C7C5]">
+            <span>English (United Kingdom)</span>
+            <div className="flex items-center gap-6">
+              <Link
+                href="/faq"
+                onClick={() => setGoogleModalOpen(false)}
+                className="hover:text-white"
+              >
+                Help
+              </Link>
+              <Link
+                href="/about"
+                onClick={() => setGoogleModalOpen(false)}
+                className="hover:text-white"
+              >
+                Privacy
+              </Link>
+              <Link
+                href="/faq"
+                onClick={() => setGoogleModalOpen(false)}
+                className="hover:text-white"
+              >
+                Terms
+              </Link>
+            </div>
           </div>
         </div>
       )}
