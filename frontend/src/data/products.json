@@ -1,0 +1,386 @@
+[
+  {
+    "id": "espresso-hightop",
+    "slug": "heritage-mocha-hightop",
+    "category": "Lifestyle",
+    "name": "Heritage Mocha High-Top",
+    "tagline": "Rich mocha leather overlays over heavy sand cotton canvas.",
+    "description": "High-collar everyday sneaker pairing burnished espresso leather panels, heavy woven duck canvas, antique gunmetal eyelets, and a cushioned cream cupsole.",
+    "price": 165,
+    "imageUrl": "/images/shoes/espresso-hightop.png",
+    "stock": 44,
+    "weight": "345g (US 9)",
+    "specs": {
+      "Upper": "Full-Grain Mocha Leather & Duck Canvas",
+      "Footbed": "Cushioned Cream Cupsole",
+      "Hardware": "Antique Gunmetal Speed Eyelets",
+      "Collar": "Padded Ankle Support"
+    },
+    "images": [
+      "/images/shoes/espresso-hightop.png",
+      "/images/shoes/chestnut-walker.png"
+    ],
+    "colorways": [
+      {
+        "id": "espresso-mocha",
+        "name": "Mocha Leather / Sand Canvas",
+        "isLimited": false,
+        "accentHex": "#8C4A27",
+        "secondaryHex": "#5E3A24",
+        "bgGradient": "radial-gradient(circle at 50% 42%, rgba(168, 120, 84, 0.2) 0%, rgba(235, 226, 212, 0.45) 48%, #F6F3EC 85%)",
+        "imageUrl": "/images/shoes/espresso-hightop.png",
+        "upper": "#7B4A2D",
+        "midsole": "#E5DDD3",
+        "outsole": "#5E3A24",
+        "laces": "#633D26",
+        "tongue": "#B69578",
+        "logo": "#9A623F"
+      },
+      {
+        "id": "espresso-chestnut",
+        "name": "Warm Chestnut / Dark Crepe",
+        "isLimited": true,
+        "accentHex": "#9A4B26",
+        "secondaryHex": "#5C2D16",
+        "bgGradient": "radial-gradient(circle at 50% 42%, rgba(180, 95, 48, 0.18) 0%, rgba(236, 224, 212, 0.45) 48%, #F6F3EC 85%)",
+        "imageUrl": "/images/shoes/chestnut-walker.png",
+        "upper": "#8D3E1C",
+        "midsole": "#2E2118",
+        "outsole": "#1E140E",
+        "laces": "#6B2E12",
+        "tongue": "#522815",
+        "logo": "#B4532A"
+      }
+    ],
+    "sizes": [
+      { "us": 7, "eu": "40", "uk": "6", "stock": 6 },
+      { "us": 8, "eu": "41", "uk": "7", "stock": 9 },
+      { "us": 8.5, "eu": "42", "uk": "7.5", "stock": 0 },
+      { "us": 9, "eu": "42.5", "uk": "8", "stock": 12 },
+      { "us": 9.5, "eu": "43", "uk": "8.5", "stock": 8 },
+      { "us": 10, "eu": "44", "uk": "9", "stock": 5 },
+      { "us": 10.5, "eu": "44.5", "uk": "9.5", "stock": 0 },
+      { "us": 11, "eu": "45", "uk": "10", "stock": 4 }
+    ]
+  },
+  {
+    "id": "crimson-runner",
+    "slug": "velocity-knit-runner",
+    "category": "Runner",
+    "name": "Velocity Knit Road Runner",
+    "tagline": "Breathable crimson & heather-grey knit for daily miles.",
+    "description": "Lightweight everyday runner crafted with breathable two-tone crimson and grey knit mesh, soft flat cotton laces, and a cushioned white EVA midsole.",
+    "price": 135,
+    "imageUrl": "/images/shoes/crimson-runner.png",
+    "stock": 41,
+    "weight": "240g (US 9)",
+    "specs": {
+      "Upper": "Breathable Two-Tone Knit Mesh",
+      "Midsole": "Lightweight Sculpted EVA Foam",
+      "Lacing": "Flat Soft-Weave Cotton Laces",
+      "Outsole": "Wrap-Around Rubber Toe Tread"
+    },
+    "images": [
+      "/images/shoes/crimson-runner.png",
+      "/images/shoes/cobalt-trainer.png"
+    ],
+    "colorways": [
+      {
+        "id": "crimson-slate",
+        "name": "Crimson Red / Heather Grey",
+        "isLimited": false,
+        "accentHex": "#A62639",
+        "secondaryHex": "#64748B",
+        "bgGradient": "radial-gradient(circle at 50% 42%, rgba(185, 48, 62, 0.16) 0%, rgba(238, 226, 224, 0.45) 48%, #F6F3EC 85%)",
+        "imageUrl": "/images/shoes/crimson-runner.png",
+        "upper": "#B91C2E",
+        "midsole": "#F8FAFC",
+        "outsole": "#991B2B",
+        "laces": "#C81E32",
+        "tongue": "#E2E8F0",
+        "logo": "#64748B"
+      },
+      {
+        "id": "crimson-cobalt",
+        "name": "Sky Cobalt Edition",
+        "isLimited": true,
+        "accentHex": "#2B5B9E",
+        "secondaryHex": "#4B7EC4",
+        "bgGradient": "radial-gradient(circle at 50% 42%, rgba(56, 118, 200, 0.15) 0%, rgba(224, 232, 240, 0.45) 48%, #F6F3EC 85%)",
+        "imageUrl": "/images/shoes/cobalt-trainer.png",
+        "upper": "#2563EB",
+        "midsole": "#60A5FA",
+        "outsole": "#1D4ED8",
+        "laces": "#93C5FD",
+        "tongue": "#3B82F6",
+        "logo": "#DBEAFE"
+      }
+    ],
+    "sizes": [
+      { "us": 7, "eu": "40", "uk": "6", "stock": 5 },
+      { "us": 8, "eu": "41", "uk": "7", "stock": 8 },
+      { "us": 8.5, "eu": "42", "uk": "7.5", "stock": 4 },
+      { "us": 9, "eu": "42.5", "uk": "8", "stock": 11 },
+      { "us": 9.5, "eu": "43", "uk": "8.5", "stock": 0 },
+      { "us": 10, "eu": "44", "uk": "9", "stock": 6 },
+      { "us": 10.5, "eu": "44.5", "uk": "9.5", "stock": 4 },
+      { "us": 11, "eu": "45", "uk": "10", "stock": 3 }
+    ]
+  },
+  {
+    "id": "navy-suede",
+    "slug": "crosby-navy-suede",
+    "category": "Lifestyle",
+    "name": "Crosby Navy Suede Mid",
+    "tagline": "Brushed deep indigo suede on a clean white cupsole.",
+    "description": "Versatile mid-top casual sneaker cut from velvety deep navy suede with neat tonal triple stitching, cotton collar lining, and a crisp white rubber sole.",
+    "price": 145,
+    "imageUrl": "/images/shoes/navy-suede.png",
+    "stock": 52,
+    "weight": "285g (US 9)",
+    "specs": {
+      "Upper": "Brushed Indigo Calf Suede",
+      "Lining": "Soft Cotton Padded Collar",
+      "Sole": "Vulcanized White Cupsole",
+      "Laces": "Heavy Organic Cotton"
+    },
+    "images": [
+      "/images/shoes/navy-suede.png",
+      "/images/shoes/ivory-canvas.png"
+    ],
+    "colorways": [
+      {
+        "id": "navy-indigo",
+        "name": "Deep Indigo / Chalk White",
+        "isLimited": false,
+        "accentHex": "#244170",
+        "secondaryHex": "#1E3A6D",
+        "bgGradient": "radial-gradient(circle at 50% 42%, rgba(42, 74, 124, 0.16) 0%, rgba(224, 229, 238, 0.45) 48%, #F6F3EC 85%)",
+        "imageUrl": "/images/shoes/navy-suede.png",
+        "upper": "#1E3A6D",
+        "midsole": "#F8FAFC",
+        "outsole": "#CBD5E1",
+        "laces": "#FFFFFF",
+        "tongue": "#172554",
+        "logo": "#60A5FA"
+      },
+      {
+        "id": "navy-ivory",
+        "name": "Unbleached Ivory Canvas",
+        "isLimited": false,
+        "accentHex": "#6B6253",
+        "secondaryHex": "#18181B",
+        "bgGradient": "radial-gradient(circle at 50% 42%, rgba(196, 184, 158, 0.24) 0%, rgba(239, 235, 225, 0.55) 48%, #F6F3EC 85%)",
+        "imageUrl": "/images/shoes/ivory-canvas.png",
+        "upper": "#F3EFE3",
+        "midsole": "#EDE9DC",
+        "outsole": "#18181B",
+        "laces": "#FFFFFF",
+        "tongue": "#EFECE2",
+        "logo": "#18181B"
+      }
+    ],
+    "sizes": [
+      { "us": 7, "eu": "40", "uk": "6", "stock": 8 },
+      { "us": 8, "eu": "41", "uk": "7", "stock": 11 },
+      { "us": 8.5, "eu": "42", "uk": "7.5", "stock": 7 },
+      { "us": 9, "eu": "42.5", "uk": "8", "stock": 14 },
+      { "us": 9.5, "eu": "43", "uk": "8.5", "stock": 6 },
+      { "us": 10, "eu": "44", "uk": "9", "stock": 0 },
+      { "us": 10.5, "eu": "44.5", "uk": "9.5", "stock": 4 },
+      { "us": 11, "eu": "45", "uk": "10", "stock": 2 }
+    ]
+  },
+  {
+    "id": "black-oxford",
+    "slug": "camden-captoe-oxford",
+    "category": "Formal",
+    "name": "Camden Cap-Toe Oxford",
+    "tagline": "Polished black box-calf derby lined in burgundy leather.",
+    "description": "Timeless black calfskin cap-toe dress shoe stitched cleanly to a slim dress welt, paired with waxed round cotton laces and a supple crimson leather lining.",
+    "price": 215,
+    "imageUrl": "/images/shoes/black-oxford.png",
+    "stock": 28,
+    "weight": "390g (US 9)",
+    "specs": {
+      "Leather": "Polished Black Box Calfskin",
+      "Lining": "Vegetable-Tanned Burgundy Lining",
+      "Welt": "Stitched Storm & Dress Welt",
+      "Last": "Tailored Cap-Toe Profile"
+    },
+    "images": [
+      "/images/shoes/black-oxford.png"
+    ],
+    "colorways": [
+      {
+        "id": "obsidian-crimson-lining",
+        "name": "Black Calfskin / Bordeaux Lining",
+        "isLimited": true,
+        "accentHex": "#7A1F2B",
+        "secondaryHex": "#18181B",
+        "bgGradient": "radial-gradient(circle at 50% 42%, rgba(152, 46, 62, 0.14) 0%, rgba(229, 226, 221, 0.48) 48%, #F6F3EC 85%)",
+        "imageUrl": "/images/shoes/black-oxford.png",
+        "upper": "#18181B",
+        "midsole": "#27272A",
+        "outsole": "#09090B",
+        "laces": "#18181B",
+        "tongue": "#9F1239",
+        "logo": "#E4E4E7"
+      }
+    ],
+    "sizes": [
+      { "us": 7, "eu": "40", "uk": "6", "stock": 3 },
+      { "us": 8, "eu": "41", "uk": "7", "stock": 6 },
+      { "us": 8.5, "eu": "42", "uk": "7.5", "stock": 4 },
+      { "us": 9, "eu": "42.5", "uk": "8", "stock": 7 },
+      { "us": 9.5, "eu": "43", "uk": "8.5", "stock": 0 },
+      { "us": 10, "eu": "44", "uk": "9", "stock": 5 },
+      { "us": 10.5, "eu": "44.5", "uk": "9.5", "stock": 3 },
+      { "us": 11, "eu": "45", "uk": "10", "stock": 0 }
+    ]
+  },
+  {
+    "id": "chestnut-walker",
+    "slug": "highland-leather-walker",
+    "category": "Heritage",
+    "name": "Highland Leather Walker",
+    "tagline": "Tumbled chestnut cowhide with cushioned arch support.",
+    "description": "Dependable all-day walking derby crafted from hand-burnished chestnut full-grain leather, heavy moccasin stitching, breathable tongue mesh, and a dark crepe outsole.",
+    "price": 160,
+    "imageUrl": "/images/shoes/chestnut-walker.png",
+    "stock": 34,
+    "weight": "355g (US 9)",
+    "specs": {
+      "Leather": "Tumbled Chestnut Full-Grain",
+      "Stitching": "Reinforced Double Welt Stitch",
+      "Footbed": "Anatomical Arch Cushioning",
+      "Outsole": "Shock-Absorbing Dark Rubber"
+    },
+    "images": [
+      "/images/shoes/chestnut-walker.png"
+    ],
+    "colorways": [
+      {
+        "id": "chestnut-mahogany",
+        "name": "Burnished Chestnut / Espresso",
+        "isLimited": false,
+        "accentHex": "#8C4A27",
+        "secondaryHex": "#5E3A24",
+        "bgGradient": "radial-gradient(circle at 50% 42%, rgba(180, 95, 48, 0.18) 0%, rgba(236, 224, 212, 0.45) 48%, #F6F3EC 85%)",
+        "imageUrl": "/images/shoes/chestnut-walker.png",
+        "upper": "#8D3E1C",
+        "midsole": "#2E2118",
+        "outsole": "#18110C",
+        "laces": "#6B2E12",
+        "tongue": "#3F261A",
+        "logo": "#EA580C"
+      }
+    ],
+    "sizes": [
+      { "us": 7, "eu": "40", "uk": "6", "stock": 4 },
+      { "us": 8, "eu": "41", "uk": "7", "stock": 7 },
+      { "us": 8.5, "eu": "42", "uk": "7.5", "stock": 5 },
+      { "us": 9, "eu": "42.5", "uk": "8", "stock": 8 },
+      { "us": 9.5, "eu": "43", "uk": "8.5", "stock": 4 },
+      { "us": 10, "eu": "44", "uk": "9", "stock": 4 },
+      { "us": 10.5, "eu": "44.5", "uk": "9.5", "stock": 2 },
+      { "us": 11, "eu": "45", "uk": "10", "stock": 0 }
+    ]
+  },
+  {
+    "id": "ivory-canvas",
+    "slug": "mercer-canvas-low",
+    "category": "Court",
+    "name": "Mercer Pinstripe Canvas Low",
+    "tagline": "Unbleached 14oz organic cotton twill with foxing stripes.",
+    "description": "Clean vintage-inspired low-top sneaker in heavy ivory organic canvas featuring a textured rubber toe cap, matte black eyelets, and classic black foxing pinstripes.",
+    "price": 98,
+    "imageUrl": "/images/shoes/ivory-canvas.png",
+    "stock": 48,
+    "weight": "265g (US 9)",
+    "specs": {
+      "Upper": "14oz Unbleached Cotton Canvas",
+      "Foxing": "Vulcanized Twin Pinstripe Wall",
+      "Hardware": "Matte Black Metal Eyelets",
+      "Lining": "Soft Cotton Twill"
+    },
+    "images": [
+      "/images/shoes/ivory-canvas.png"
+    ],
+    "colorways": [
+      {
+        "id": "ivory-noir-stripe",
+        "name": "Natural Ivory / Black Stripe",
+        "isLimited": false,
+        "accentHex": "#6B6253",
+        "secondaryHex": "#18181B",
+        "bgGradient": "radial-gradient(circle at 50% 42%, rgba(196, 184, 158, 0.24) 0%, rgba(239, 235, 225, 0.55) 48%, #F6F3EC 85%)",
+        "imageUrl": "/images/shoes/ivory-canvas.png",
+        "upper": "#F3EFE3",
+        "midsole": "#ECE8DA",
+        "outsole": "#18181B",
+        "laces": "#FFFFFF",
+        "tongue": "#EFECE2",
+        "logo": "#18181B"
+      }
+    ],
+    "sizes": [
+      { "us": 7, "eu": "40", "uk": "6", "stock": 6 },
+      { "us": 8, "eu": "41", "uk": "7", "stock": 10 },
+      { "us": 8.5, "eu": "42", "uk": "7.5", "stock": 8 },
+      { "us": 9, "eu": "42.5", "uk": "8", "stock": 12 },
+      { "us": 9.5, "eu": "43", "uk": "8.5", "stock": 0 },
+      { "us": 10, "eu": "44", "uk": "9", "stock": 6 },
+      { "us": 10.5, "eu": "44.5", "uk": "9.5", "stock": 4 },
+      { "us": 11, "eu": "45", "uk": "10", "stock": 2 }
+    ]
+  },
+  {
+    "id": "cobalt-trainer",
+    "slug": "tempo-retro-trainer",
+    "category": "Runner",
+    "name": "Tempo Perforated Retro Trainer",
+    "tagline": "Sky-blue perforated nubuck retro jogger for effortless daily wear.",
+    "description": "Tonal sky-cobalt retro sneaker crafted with breathable perforated side panels, sculpted cushioning wedge, convenient heel pull tab, and flex-grooved rubber sole.",
+    "price": 130,
+    "imageUrl": "/images/shoes/cobalt-trainer.png",
+    "stock": 33,
+    "weight": "278g (US 9)",
+    "specs": {
+      "Upper": "Perforated Tonal Cobalt Nubuck",
+      "Midsole": "Sculpted Compression Wedge",
+      "Heel": "Woven Pull Loop",
+      "Outsole": "Flex-Groove Rubber Tread"
+    },
+    "images": [
+      "/images/shoes/cobalt-trainer.png"
+    ],
+    "colorways": [
+      {
+        "id": "cobalt-tonal",
+        "name": "Sky Cobalt / Ice Blue",
+        "isLimited": true,
+        "accentHex": "#2B5B9E",
+        "secondaryHex": "#4B7EC4",
+        "bgGradient": "radial-gradient(circle at 50% 42%, rgba(56, 118, 200, 0.16) 0%, rgba(224, 232, 240, 0.48) 48%, #F6F3EC 85%)",
+        "imageUrl": "/images/shoes/cobalt-trainer.png",
+        "upper": "#2563EB",
+        "midsole": "#60A5FA",
+        "outsole": "#1D4ED8",
+        "laces": "#93C5FD",
+        "tongue": "#3B82F6",
+        "logo": "#DBEAFE"
+      }
+    ],
+    "sizes": [
+      { "us": 7, "eu": "40", "uk": "6", "stock": 0 },
+      { "us": 8, "eu": "41", "uk": "7", "stock": 7 },
+      { "us": 8.5, "eu": "42", "uk": "7.5", "stock": 6 },
+      { "us": 9, "eu": "42.5", "uk": "8", "stock": 9 },
+      { "us": 9.5, "eu": "43", "uk": "8.5", "stock": 5 },
+      { "us": 10, "eu": "44", "uk": "9", "stock": 4 },
+      { "us": 10.5, "eu": "44.5", "uk": "9.5", "stock": 2 },
+      { "us": 11, "eu": "45", "uk": "10", "stock": 0 }
+    ]
+  }
+]

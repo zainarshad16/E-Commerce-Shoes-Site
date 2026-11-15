@@ -1,0 +1,14 @@
+.neon
+node_modules/
+**/node_modules/
+.env
+.env.local
+**/.env
+**/.env.local
+!.env.example
+!**/.env.example
+**/.next/
+**/dist/
+**/.open-next/
+backend/uploads/
+**/*.tsbuildinfo

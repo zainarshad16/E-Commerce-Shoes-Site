@@ -1,0 +1,18 @@
+{
+  "name": "aether-3d-sneaker-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AETHER LABS 3D Scrollytelling Sneaker Storefront & Headless 3D CMS",
+  "scripts": {
+    "build": "npm --prefix backend run prisma:generate && npm --prefix backend run build && npm --prefix frontend run build",
+    "start": "npm --prefix frontend run start",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "db:push": "npm --prefix backend run prisma:push",
+    "db:seed": "npm --prefix backend run prisma:seed"
+  },
+  "dependencies": {
+    "@neon/config": "^1.14.0",
+    "@neon/env": "^2.1.3"
+  }
+}
