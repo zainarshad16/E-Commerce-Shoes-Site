@@ -11,7 +11,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     getCollections(),
   ]);
 
-  const siteUrl = seoConfig.siteUrl || 'https://aetherfootwear.com';
+  const siteUrl =
+    seoConfig.siteUrl || 'https://atelier-vance-storefront.vercel.app';
   const now = new Date();
 
   const staticRoutes: MetadataRoute.Sitemap = [

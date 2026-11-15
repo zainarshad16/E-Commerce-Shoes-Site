@@ -125,7 +125,7 @@ const DEFAULT_CONTACT_SETTINGS: SiteContactSettings = {
   cookieBannerDescription:
     'We use essential cookies for bag & checkout security, Cloudflare edge protection, and optional analytics to refine your showroom experience.',
   cloudflareAnalyticsToken: '',
-  cloudflareZoneDomain: 'ateliervance.com',
+  cloudflareZoneDomain: 'atelier-vance-storefront.vercel.app',
   googleClientId:
     '410827708760-5dd9s2sekl7vfro9gik90qf22irfetn5.apps.googleusercontent.com',
 };

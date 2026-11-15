@@ -63,7 +63,9 @@ const jetbrainsMono = JetBrains_Mono({
 export async function generateMetadata(): Promise<Metadata> {
   const seoConfig = await getSiteSeoConfig();
   return {
-    metadataBase: new URL(seoConfig.siteUrl || 'https://ateliervance.com'),
+    metadataBase: new URL(
+      seoConfig.siteUrl || 'https://atelier-vance-storefront.vercel.app'
+    ),
     title: {
       default: seoConfig.defaultMetaTitle,
       template: `%s`,

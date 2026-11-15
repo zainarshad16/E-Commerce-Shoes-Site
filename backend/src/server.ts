@@ -9,7 +9,8 @@ app.set('trust proxy', true);
 const PORT = Number(process.env.PORT || 4000);
 
 const allowedOrigins = (
-  process.env.FRONTEND_URL || 'http://localhost:3000,https://aetherfootwear.com'
+  process.env.FRONTEND_URL ||
+  'http://localhost:3000,https://atelier-vance-storefront.vercel.app'
 )
   .split(',')
   .map((o) => o.trim());

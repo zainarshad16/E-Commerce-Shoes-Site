@@ -6686,7 +6686,7 @@ export function AdminStudioClient() {
                             cloudflareZoneDomain: e.target.value,
                           }))
                         }
-                        placeholder="ateliervance.com"
+                        placeholder="atelier-vance-storefront.vercel.app"
                         className="w-full rounded-xl border border-white/10 bg-black/50 px-3.5 py-2.5 text-sm text-white"
                       />
                     </div>

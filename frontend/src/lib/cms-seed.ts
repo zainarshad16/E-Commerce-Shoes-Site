@@ -21,14 +21,16 @@ function makeSizes(prefix: string, counts: number[]) {
 export const SEED_SEO_CONFIG: SiteSeoConfig = {
   id: 'seo-config-primary',
   siteName: 'ATELIER VANCE',
-  siteUrl: process.env.NEXT_PUBLIC_SITE_URL || 'https://ateliervance.com',
+  siteUrl:
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    'https://atelier-vance-storefront.vercel.app',
   defaultMetaTitle: 'Atelier Vance | Handcrafted & Everyday Footwear',
   defaultMetaDescription:
     'Honest full-grain leather oxfords, brushed indigo suede mid-tops, and breathable everyday runners designed for lasting comfort.',
   defaultOgImage: '/images/shoes/espresso-hightop.png',
   organizationSchemaJson: {
     name: 'Atelier Vance Footwear',
-    url: 'https://ateliervance.com',
+    url: 'https://atelier-vance-storefront.vercel.app',
     logo: '/images/shoes/espresso-hightop.png',
     sameAs: [
       'https://instagram.com/ateliervance',

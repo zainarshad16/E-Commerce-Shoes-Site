@@ -14,7 +14,16 @@ export async function triggerFrontendRevalidation(
   tags: string[],
   paths: string[] = []
 ): Promise<RevalidationResult> {
-  const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const rawFrontendUrls = (
+    process.env.FRONTEND_URL || 'https://atelier-vance-storefront.vercel.app'
+  )
+    .split(',')
+    .map((u) => u.trim().replace(/\/$/, ''))
+    .filter(Boolean);
+  const frontendUrl =
+    rawFrontendUrls.find((u) => !u.includes('localhost')) ||
+    rawFrontendUrls[0] ||
+    'https://atelier-vance-storefront.vercel.app';
   const secret = process.env.REVALIDATE_SECRET || 'isr-revalidate-webhook-secret-token';
   const endpoint = `${frontendUrl}/api/revalidate`;
 
