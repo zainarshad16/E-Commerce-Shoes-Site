@@ -178,6 +178,25 @@ export interface CartItem {
   maxStock: number;
 }
 
+export type AdminTabKey =
+  | 'products'
+  | 'blogs'
+  | 'orders'
+  | 'users'
+  | 'roles'
+  | 'contact-chat'
+  | 'section-hero'
+  | 'section-statement'
+  | 'section-faq'
+  | 'section-newsletter'
+  | 'global-seo';
+
+export interface RolePermissionsConfig {
+  editorTabs: AdminTabKey[];
+  userTabOverrides: Record<string, AdminTabKey[]>;
+  updatedAt?: string;
+}
+
 export interface ManagedUser {
   id: string;
   email: string;
@@ -189,6 +208,7 @@ export interface ManagedUser {
   state?: string;
   zipCode?: string;
   authProvider: 'email' | 'google';
+  currentPassword?: string;
   createdAt: string;
   lastLoginAt: string;
   orderCount: number;

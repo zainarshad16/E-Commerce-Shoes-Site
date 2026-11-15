@@ -145,6 +145,7 @@ interface UserProfileMetaEntry {
   state?: string;
   zipCode?: string;
   authProvider?: 'email' | 'google';
+  plainPassword?: string;
   lastLoginAt?: string;
 }
 
@@ -193,6 +194,105 @@ function persistUserProfileMeta() {
 }
 
 loadUserProfileMeta();
+
+if (!userProfileMeta.has('admin@aetherfootwear.com')) {
+  userProfileMeta.set('admin@aetherfootwear.com', {
+    authProvider: 'email',
+    plainPassword: 'AetherAdmin2026!',
+  });
+}
+if (!userProfileMeta.has('editor@aetherfootwear.com')) {
+  userProfileMeta.set('editor@aetherfootwear.com', {
+    authProvider: 'email',
+    plainPassword: 'AetherEditor2026!',
+  });
+}
+
+const VALID_ADMIN_TABS = new Set([
+  'products',
+  'blogs',
+  'orders',
+  'users',
+  'roles',
+  'contact-chat',
+  'section-hero',
+  'section-statement',
+  'section-faq',
+  'section-newsletter',
+  'global-seo',
+]);
+
+const DEFAULT_EDITOR_TABS = [
+  'products',
+  'blogs',
+  'section-hero',
+  'section-statement',
+  'section-faq',
+  'section-newsletter',
+  'global-seo',
+];
+
+const ROLE_PERMISSIONS_PATH = path.resolve(
+  __dirname,
+  '../../data/role-permissions.json'
+);
+
+let memoryRolePermissions: {
+  editorTabs: string[];
+  userTabOverrides: Record<string, string[]>;
+  updatedAt: string;
+} = {
+  editorTabs: [...DEFAULT_EDITOR_TABS],
+  userTabOverrides: {},
+  updatedAt: new Date().toISOString(),
+};
+
+function loadRolePermissions() {
+  try {
+    if (!fs.existsSync(ROLE_PERMISSIONS_PATH)) return;
+    const raw = fs.readFileSync(ROLE_PERMISSIONS_PATH, 'utf8');
+    const parsed = JSON.parse(raw) as Partial<typeof memoryRolePermissions>;
+    if (Array.isArray(parsed.editorTabs)) {
+      memoryRolePermissions.editorTabs = parsed.editorTabs.filter((t) =>
+        VALID_ADMIN_TABS.has(t)
+      );
+    }
+    if (parsed.userTabOverrides && typeof parsed.userTabOverrides === 'object') {
+      const cleanOverrides: Record<string, string[]> = {};
+      for (const [k, v] of Object.entries(parsed.userTabOverrides)) {
+        if (Array.isArray(v)) {
+          cleanOverrides[k.toLowerCase()] = v.filter((t) =>
+            VALID_ADMIN_TABS.has(t)
+          );
+        }
+      }
+      memoryRolePermissions.userTabOverrides = cleanOverrides;
+    }
+    if (typeof parsed.updatedAt === 'string') {
+      memoryRolePermissions.updatedAt = parsed.updatedAt;
+    }
+  } catch {
+    // Keep defaults
+  }
+}
+
+function persistRolePermissions() {
+  try {
+    const dir = path.dirname(ROLE_PERMISSIONS_PATH);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(
+      ROLE_PERMISSIONS_PATH,
+      JSON.stringify(memoryRolePermissions, null, 2),
+      'utf8'
+    );
+  } catch {
+    // Non-fatal local persistence fallback
+  }
+}
+
+loadRolePermissions();
 
 const SEED_OR_TEST_EMAILS = new Set([
   'hannah.lindstrom@gmail.com',
@@ -254,6 +354,13 @@ function serializeManagedUser(user: ManagedUserRecord) {
     authProvider:
       meta?.authProvider ??
       (emailLower.endsWith('@gmail.com') ? 'google' : user.authProvider),
+    currentPassword:
+      meta?.plainPassword ||
+      ((meta?.authProvider ??
+        (emailLower.endsWith('@gmail.com') ? 'google' : user.authProvider)) ===
+      'google'
+        ? 'Google OAuth (no password set)'
+        : 'Encrypted (set new password below)'),
     createdAt: user.createdAt,
     lastLoginAt: meta?.lastLoginAt ?? user.lastLoginAt,
     orderCount: matchingOrders.length,
@@ -317,6 +424,7 @@ router.post('/auth/register', async (req: Request, res: Response) => {
     state,
     zipCode,
     authProvider: 'email',
+    plainPassword: rawPassword,
     lastLoginAt: nowIso,
   });
   persistUserProfileMeta();
@@ -426,7 +534,11 @@ router.post('/auth/login', async (req: Request, res: Response) => {
     }
 
     const prevMeta = userProfileMeta.get(email) || {};
-    userProfileMeta.set(email, { ...prevMeta, lastLoginAt: nowIso });
+    userProfileMeta.set(email, {
+      ...prevMeta,
+      plainPassword: password,
+      lastLoginAt: nowIso,
+    });
     persistUserProfileMeta();
 
     const token = signAuthToken({
@@ -689,7 +801,7 @@ router.post('/auth/google', async (req: Request, res: Response) => {
 router.get(
   '/users',
   authenticateJWT,
-  requireRole(['ADMIN', 'EDITOR']),
+  requireRole(['ADMIN']),
   async (_req: Request, res: Response) => {
     const dbReady = await isDbConnected();
     if (dbReady && prisma) {
@@ -706,6 +818,9 @@ router.get(
         const matchingOrders = dbOrders.filter(
           (o) => o.customerEmail.toLowerCase() === emailLower
         );
+        const authProvider =
+          meta?.authProvider ||
+          (emailLower.endsWith('@gmail.com') ? 'google' : 'email');
         return {
           id: u.id,
           email: u.email,
@@ -716,9 +831,12 @@ router.get(
           city: meta?.city || '',
           state: meta?.state || '',
           zipCode: meta?.zipCode || '',
-          authProvider:
-            meta?.authProvider ||
-            (emailLower.endsWith('@gmail.com') ? 'google' : 'email'),
+          authProvider,
+          currentPassword:
+            meta?.plainPassword ||
+            (authProvider === 'google'
+              ? 'Google OAuth (no password set)'
+              : 'Encrypted (set new password below)'),
           createdAt: u.createdAt.toISOString(),
           lastLoginAt: meta?.lastLoginAt || u.updatedAt.toISOString(),
           orderCount: matchingOrders.length,
@@ -739,7 +857,7 @@ router.get(
 router.put(
   '/users/:id',
   authenticateJWT,
-  requireRole(['ADMIN', 'EDITOR']),
+  requireRole(['ADMIN']),
   async (req: Request, res: Response) => {
     const targetId = paramStr(req.params.id);
     const body = req.body as {
@@ -798,6 +916,7 @@ router.put(
         city: body.city ?? prevMeta.city,
         state: body.state ?? prevMeta.state,
         zipCode: body.zipCode ?? prevMeta.zipCode,
+        ...(nextPassword ? { plainPassword: nextPassword } : {}),
       });
       persistUserProfileMeta();
 
@@ -836,13 +955,16 @@ router.put(
       userRecord.passwordHash = await bcrypt.hash(nextPassword, 10);
     }
 
+    const prevMemMeta = userProfileMeta.get(userRecord.email.toLowerCase()) || {};
     userProfileMeta.set(userRecord.email.toLowerCase(), {
+      ...prevMemMeta,
       phone: userRecord.phone,
       address: userRecord.address,
       city: userRecord.city,
       state: userRecord.state,
       zipCode: userRecord.zipCode,
       authProvider: userRecord.authProvider,
+      ...(nextPassword ? { plainPassword: nextPassword } : {}),
       lastLoginAt: userRecord.lastLoginAt,
     });
     persistUserProfileMeta();
@@ -912,6 +1034,7 @@ router.put(
       const prevMeta = userProfileMeta.get(dbUser.email.toLowerCase()) || {};
       userProfileMeta.set(updated.email.toLowerCase(), {
         ...prevMeta,
+        ...(nextPassword ? { plainPassword: nextPassword } : {}),
         lastLoginAt: new Date().toISOString(),
       });
       persistUserProfileMeta();
@@ -971,6 +1094,89 @@ router.put(
         role: memUser.role,
       },
     });
+  }
+);
+
+router.get(
+  '/settings/roles',
+  authenticateJWT,
+  requireRole(['ADMIN', 'EDITOR']),
+  async (_req: Request, res: Response) => {
+    const dbReady = await isDbConnected();
+    if (dbReady && prisma) {
+      const saved = await prisma.pageSection.findUnique({
+        where: { id: 'site-role-permissions' },
+      });
+      if (saved?.contentJson && typeof saved.contentJson === 'object') {
+        const json = saved.contentJson as Partial<typeof memoryRolePermissions>;
+        res.json({
+          permissions: {
+            editorTabs: Array.isArray(json.editorTabs)
+              ? json.editorTabs.filter((t) => VALID_ADMIN_TABS.has(t))
+              : memoryRolePermissions.editorTabs,
+            userTabOverrides:
+              json.userTabOverrides && typeof json.userTabOverrides === 'object'
+                ? json.userTabOverrides
+                : memoryRolePermissions.userTabOverrides,
+            updatedAt: json.updatedAt || memoryRolePermissions.updatedAt,
+          },
+        });
+        return;
+      }
+    }
+    res.json({ permissions: memoryRolePermissions });
+  }
+);
+
+router.put(
+  '/settings/roles',
+  authenticateJWT,
+  requireRole(['ADMIN']),
+  async (req: Request, res: Response) => {
+    const body = req.body as Partial<typeof memoryRolePermissions>;
+    const cleanEditorTabs = Array.isArray(body.editorTabs)
+      ? Array.from(
+          new Set(body.editorTabs.filter((t) => VALID_ADMIN_TABS.has(t)))
+        )
+      : memoryRolePermissions.editorTabs;
+
+    const cleanOverrides: Record<string, string[]> = {};
+    if (body.userTabOverrides && typeof body.userTabOverrides === 'object') {
+      for (const [emailKey, tabs] of Object.entries(body.userTabOverrides)) {
+        if (Array.isArray(tabs)) {
+          cleanOverrides[emailKey.trim().toLowerCase()] = Array.from(
+            new Set(tabs.filter((t) => VALID_ADMIN_TABS.has(t)))
+          );
+        }
+      }
+    }
+
+    memoryRolePermissions = {
+      editorTabs: cleanEditorTabs,
+      userTabOverrides: cleanOverrides,
+      updatedAt: new Date().toISOString(),
+    };
+    persistRolePermissions();
+
+    const dbReady = await isDbConnected();
+    if (dbReady && prisma) {
+      await prisma.pageSection.upsert({
+        where: { id: 'site-role-permissions' },
+        update: {
+          contentJson: memoryRolePermissions as unknown as Prisma.InputJsonValue,
+        },
+        create: {
+          id: 'site-role-permissions',
+          pageSlug: 'settings',
+          sectionType: 'NEWSLETTER',
+          contentJson: memoryRolePermissions as unknown as Prisma.InputJsonValue,
+          orderIndex: 100,
+          isVisible: true,
+        },
+      });
+    }
+
+    res.json({ permissions: memoryRolePermissions });
   }
 );
 

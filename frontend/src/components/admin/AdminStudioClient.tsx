@@ -49,6 +49,7 @@ import { useStore } from '@/context/StoreContext';
 import { API_BASE_URL } from '@/lib/config';
 import { buildFaqSchema } from '@/lib/seo';
 import {
+  AdminTabKey,
   BlogPost,
   ColorwayVariant,
   FaqItem,
@@ -58,6 +59,7 @@ import {
   PageSection,
   PageSectionType,
   Product,
+  RolePermissionsConfig,
   ScrollHotspot,
   Vector3Coords,
 } from '@/types/cms';
@@ -68,17 +70,79 @@ const ShoeStage = dynamic(() => import('@/components/three/ShoeStage'), {
   ssr: false,
 });
 
-type MainAdminTab =
-  | 'products'
-  | 'blogs'
-  | 'users'
-  | 'contact-chat'
-  | 'section-hero'
-  | 'section-statement'
-  | 'section-faq'
-  | 'section-newsletter'
-  | 'global-seo'
-  | 'orders';
+type MainAdminTab = AdminTabKey;
+
+const DEFAULT_EDITOR_TABS: MainAdminTab[] = [
+  'products',
+  'blogs',
+  'section-hero',
+  'section-statement',
+  'section-faq',
+  'section-newsletter',
+  'global-seo',
+];
+
+const ASSIGNABLE_ROLE_TABS: {
+  id: MainAdminTab;
+  label: string;
+  description: string;
+  category: 'Editing' | 'Operations';
+}[] = [
+  {
+    id: 'products',
+    label: 'Products & 3D Studio',
+    description: 'Edit catalog products, 3D GLB models, hotspots & variants',
+    category: 'Editing',
+  },
+  {
+    id: 'blogs',
+    label: 'Blog & Journal',
+    description: 'Create and edit journal stories & markdown articles',
+    category: 'Editing',
+  },
+  {
+    id: 'section-hero',
+    label: 'Hero Section',
+    description: 'Edit hero headline, subtitle, 3D sneaker & CTA',
+    category: 'Editing',
+  },
+  {
+    id: 'section-statement',
+    label: 'Statement Band',
+    description: 'Edit mid-page editorial statement & marquee',
+    category: 'Editing',
+  },
+  {
+    id: 'section-faq',
+    label: 'FAQ Accordion',
+    description: 'Edit customer FAQ questions & JSON-LD schema',
+    category: 'Editing',
+  },
+  {
+    id: 'section-newsletter',
+    label: 'Newsletter Band',
+    description: 'Edit footer newsletter signup copy & callout',
+    category: 'Editing',
+  },
+  {
+    id: 'global-seo',
+    label: 'Global SEO & Nav',
+    description: 'Edit site title, meta tags & navigation links',
+    category: 'Editing',
+  },
+  {
+    id: 'orders',
+    label: 'Orders',
+    description: 'View & update customer order fulfillment status',
+    category: 'Operations',
+  },
+  {
+    id: 'contact-chat',
+    label: 'Contact & AI Chatbot',
+    description: 'Manage WhatsApp, phone, email & AI chatbot prompt',
+    category: 'Operations',
+  },
+];
 
 type ProductSubTab =
   | 'general'
@@ -952,10 +1016,20 @@ export function AdminStudioClient() {
   const [userSearch, setUserSearch] = useState('');
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [userNewPassword, setUserNewPassword] = useState('');
+  const [showUserCurrentPassword, setShowUserCurrentPassword] = useState(true);
+  const [showUserNewPassword, setShowUserNewPassword] = useState(true);
+  const [copiedPasswordId, setCopiedPasswordId] = useState<string | null>(null);
   const [adminCredName, setAdminCredName] = useState('');
   const [adminCredEmail, setAdminCredEmail] = useState('');
   const [adminCurrentPassword, setAdminCurrentPassword] = useState('');
   const [adminNewPassword, setAdminNewPassword] = useState('');
+
+  // Role & Tab Permissions State (Admin-managed)
+  const [rolePermissions, setRolePermissions] = useState<RolePermissionsConfig>({
+    editorTabs: DEFAULT_EDITOR_TABS,
+    userTabOverrides: {},
+  });
+  const [roleTargetKey, setRoleTargetKey] = useState<string>('__DEFAULT_EDITOR__');
 
   useEffect(() => {
     if (authUser) {
@@ -1010,18 +1084,24 @@ export function AdminStudioClient() {
 
     async function loadAdminData() {
       try {
-        const [prodRes, ordRes, blogRes, usersRes, contactRes, cmsRes] =
+        const isAdminRole = authUser?.role === 'ADMIN';
+        const [prodRes, ordRes, blogRes, usersRes, contactRes, cmsRes, rolesRes] =
           await Promise.all([
             fetch(`${API_BASE_URL}/products?includeUnpublished=true`),
             fetch(`${API_BASE_URL}/orders`, {
               headers: { Authorization: `Bearer ${authToken}` },
             }),
             fetch(`${API_BASE_URL}/blogs?includeUnpublished=true`),
-            fetch(`${API_BASE_URL}/users`, {
-              headers: { Authorization: `Bearer ${authToken}` },
-            }),
+            isAdminRole
+              ? fetch(`${API_BASE_URL}/users`, {
+                  headers: { Authorization: `Bearer ${authToken}` },
+                })
+              : Promise.resolve(null),
             fetch(`${API_BASE_URL}/settings/contact`),
             fetch(`${API_BASE_URL}/cms/home`),
+            fetch(`${API_BASE_URL}/settings/roles`, {
+              headers: { Authorization: `Bearer ${authToken}` },
+            }),
           ]);
         if (!cancelled && prodRes.ok) {
           const data = (await prodRes.json()) as { products?: Product[] };
@@ -1041,7 +1121,7 @@ export function AdminStudioClient() {
             setBlogs(data.blogs);
           }
         }
-        if (!cancelled && usersRes.ok) {
+        if (!cancelled && usersRes && usersRes.ok) {
           const data = (await usersRes.json()) as { users?: ManagedUser[] };
           if (data.users) {
             setManagedUsers(data.users);
@@ -1062,6 +1142,21 @@ export function AdminStudioClient() {
             setPageSections(data.sections);
           }
         }
+        if (!cancelled && rolesRes.ok) {
+          const data = (await rolesRes.json()) as {
+            permissions?: RolePermissionsConfig;
+          };
+          if (data.permissions) {
+            setRolePermissions({
+              editorTabs:
+                Array.isArray(data.permissions.editorTabs) &&
+                data.permissions.editorTabs.length > 0
+                  ? data.permissions.editorTabs
+                  : DEFAULT_EDITOR_TABS,
+              userTabOverrides: data.permissions.userTabOverrides ?? {},
+            });
+          }
+        }
       } catch {
         // Offline / seed mode already loaded in StoreContext
       }
@@ -1071,7 +1166,7 @@ export function AdminStudioClient() {
     return () => {
       cancelled = true;
     };
-  }, [authToken, setBlogs, setContactSettings, setOrders, setPageSections, setProducts]);
+  }, [authToken, authUser?.role, setBlogs, setContactSettings, setOrders, setPageSections, setProducts]);
 
   const filteredUsers = useMemo(() => {
     const q = userSearch.trim().toLowerCase();
@@ -1141,6 +1236,96 @@ export function AdminStudioClient() {
       );
     } catch {
       notify('Unable to reach backend to save user account.');
+    } finally {
+      setSavingBusy(false);
+    }
+  }
+
+  const editorUsers = useMemo(
+    () => managedUsers.filter((u) => u.role === 'EDITOR'),
+    [managedUsers]
+  );
+
+  const activeRoleTabList: MainAdminTab[] = useMemo(() => {
+    if (roleTargetKey === '__DEFAULT_EDITOR__') {
+      return rolePermissions.editorTabs;
+    }
+    const override = rolePermissions.userTabOverrides[roleTargetKey];
+    return Array.isArray(override) ? override : rolePermissions.editorTabs;
+  }, [rolePermissions, roleTargetKey]);
+
+  function toggleRoleTab(tabId: MainAdminTab) {
+    setRolePermissions((prev) => {
+      const current =
+        roleTargetKey === '__DEFAULT_EDITOR__'
+          ? prev.editorTabs
+          : prev.userTabOverrides[roleTargetKey] ?? prev.editorTabs;
+      const exists = current.includes(tabId);
+      const next = exists
+        ? current.filter((t) => t !== tabId)
+        : [...current, tabId];
+      if (roleTargetKey === '__DEFAULT_EDITOR__') {
+        return { ...prev, editorTabs: next };
+      }
+      return {
+        ...prev,
+        userTabOverrides: {
+          ...prev.userTabOverrides,
+          [roleTargetKey]: next,
+        },
+      };
+    });
+  }
+
+  function applyRolePreset(preset: MainAdminTab[]) {
+    setRolePermissions((prev) => {
+      if (roleTargetKey === '__DEFAULT_EDITOR__') {
+        return { ...prev, editorTabs: [...preset] };
+      }
+      return {
+        ...prev,
+        userTabOverrides: {
+          ...prev.userTabOverrides,
+          [roleTargetKey]: [...preset],
+        },
+      };
+    });
+  }
+
+  function resetEditorOverride(emailKey: string) {
+    setRolePermissions((prev) => {
+      const nextOverrides = { ...prev.userTabOverrides };
+      delete nextOverrides[emailKey];
+      return { ...prev, userTabOverrides: nextOverrides };
+    });
+  }
+
+  async function handleSaveRolePermissions() {
+    setSavingBusy(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/settings/roles`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(rolePermissions),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        permissions?: RolePermissionsConfig;
+        error?: string;
+      };
+      if (!res.ok || !data.permissions) {
+        notify(`Role permissions error: ${data.error || res.statusText}`);
+        return;
+      }
+      setRolePermissions({
+        editorTabs: data.permissions.editorTabs,
+        userTabOverrides: data.permissions.userTabOverrides ?? {},
+      });
+      notify('Role & Editor tab permissions saved.');
+    } catch {
+      notify('Unable to reach backend to save role permissions.');
     } finally {
       setSavingBusy(false);
     }
@@ -2199,6 +2384,112 @@ export function AdminStudioClient() {
     return alerts;
   }, [products]);
 
+  const allNavTabs = useMemo(
+    () =>
+      [
+        {
+          id: 'products',
+          label: `Products (${products.length})`,
+          sub: 'Catalog, pricing, SKUs & imagery',
+          icon: Package,
+        },
+        {
+          id: 'blogs',
+          label: `Blogs & Journal (${blogs.length})`,
+          sub: 'Product stories & editorial CMS',
+          icon: BookOpen,
+        },
+        {
+          id: 'orders',
+          label: `Orders (${orders.length})`,
+          sub: 'Fulfillment, stock & status desk',
+          icon: ShoppingBag,
+          badge: lowStockAlerts.length > 0 ? lowStockAlerts.length : undefined,
+        },
+        {
+          id: 'users',
+          label: `Users & Access (${managedUsers.length})`,
+          sub: 'Accounts, passwords & admin keys',
+          icon: Users,
+        },
+        {
+          id: 'roles',
+          label: 'Roles & Permissions',
+          sub: 'Assign Editor & per-user tabs',
+          icon: ShieldCheck,
+        },
+        {
+          id: 'contact-chat',
+          label: 'Contact & WhatsApp AI',
+          sub: 'Phone, WhatsApp, email & bot',
+          icon: MessageCircle,
+        },
+        {
+          id: 'section-hero',
+          label: 'Hero Section',
+          sub: 'Landing banner copy & CTAs',
+          icon: Sparkles,
+        },
+        {
+          id: 'section-statement',
+          label: 'Statement & Metrics',
+          sub: 'Workshop standard & stats',
+          icon: Activity,
+        },
+        {
+          id: 'section-faq',
+          label: 'FAQ Section',
+          sub: 'Sizing, leather care & returns',
+          icon: HelpCircle,
+        },
+        {
+          id: 'section-newsletter',
+          label: 'Newsletter Section',
+          sub: 'Private release & journal opt-in',
+          icon: Mail,
+        },
+        {
+          id: 'global-seo',
+          label: 'Global SEO',
+          sub: 'Meta tags, SERP & OpenGraph',
+          icon: Globe,
+        },
+      ] as {
+        id: MainAdminTab;
+        label: string;
+        sub: string;
+        icon: React.ElementType;
+        badge?: number;
+      }[],
+    [blogs.length, lowStockAlerts.length, managedUsers.length, orders.length, products.length]
+  );
+
+  const visibleNavTabs = useMemo(() => {
+    if (authUser?.role === 'ADMIN') return allNavTabs;
+    const emailKey = authUser?.email?.trim().toLowerCase() || '';
+    const override = emailKey
+      ? rolePermissions.userTabOverrides[emailKey]
+      : undefined;
+    const allowedSet = new Set<MainAdminTab>(
+      Array.isArray(override) ? override : rolePermissions.editorTabs
+    );
+    return allNavTabs.filter(
+      (tab) =>
+        tab.id !== 'users' && tab.id !== 'roles' && allowedSet.has(tab.id)
+    );
+  }, [allNavTabs, authUser?.email, authUser?.role, rolePermissions]);
+
+  const canAccessTab = useCallback(
+    (tabId: MainAdminTab) => visibleNavTabs.some((t) => t.id === tabId),
+    [visibleNavTabs]
+  );
+
+  useEffect(() => {
+    if (visibleNavTabs.length > 0 && !canAccessTab(activeTab)) {
+      setActiveTab(visibleNavTabs[0].id);
+    }
+  }, [activeTab, canAccessTab, visibleNavTabs]);
+
   const filteredProducts = useMemo(() => {
     const q = productSearch.trim().toLowerCase();
     if (!q) return products;
@@ -2518,85 +2809,12 @@ export function AdminStudioClient() {
                   </p>
                 </div>
                 <span className="rounded-full border border-white/10 bg-black/50 px-2.5 py-0.5 font-mono text-[10px] text-zinc-400">
-                  10 TABS
+                  {visibleNavTabs.length} TABS
                 </span>
               </div>
 
               <nav className="space-y-1.5">
-                {(
-                  [
-                    {
-                      id: 'products',
-                      label: `Products (${products.length})`,
-                      sub: 'Catalog, pricing, SKUs & imagery',
-                      icon: Package,
-                    },
-                    {
-                      id: 'blogs',
-                      label: `Blogs & Journal (${blogs.length})`,
-                      sub: 'Product stories & editorial CMS',
-                      icon: BookOpen,
-                    },
-                    {
-                      id: 'orders',
-                      label: `Orders (${orders.length})`,
-                      sub: 'Fulfillment, stock & status desk',
-                      icon: ShoppingBag,
-                      badge:
-                        lowStockAlerts.length > 0
-                          ? lowStockAlerts.length
-                          : undefined,
-                    },
-                    {
-                      id: 'users',
-                      label: `Users & Access (${managedUsers.length})`,
-                      sub: 'Accounts, passwords & admin keys',
-                      icon: Users,
-                    },
-                    {
-                      id: 'contact-chat',
-                      label: 'Contact & WhatsApp AI',
-                      sub: 'Phone, WhatsApp, email & bot',
-                      icon: MessageCircle,
-                    },
-                    {
-                      id: 'section-hero',
-                      label: 'Hero Section',
-                      sub: 'Landing banner copy & CTAs',
-                      icon: Sparkles,
-                    },
-                    {
-                      id: 'section-statement',
-                      label: 'Statement & Metrics',
-                      sub: 'Workshop standard & stats',
-                      icon: Activity,
-                    },
-                    {
-                      id: 'section-faq',
-                      label: 'FAQ Section',
-                      sub: 'Sizing, leather care & returns',
-                      icon: HelpCircle,
-                    },
-                    {
-                      id: 'section-newsletter',
-                      label: 'Newsletter Section',
-                      sub: 'Private release & journal opt-in',
-                      icon: Mail,
-                    },
-                    {
-                      id: 'global-seo',
-                      label: 'Global SEO',
-                      sub: 'Meta tags, SERP & OpenGraph',
-                      icon: Globe,
-                    },
-                  ] as {
-                    id: MainAdminTab;
-                    label: string;
-                    sub: string;
-                    icon: React.ElementType;
-                    badge?: number;
-                  }[]
-                ).map((tab) => {
+                {visibleNavTabs.map((tab) => {
                   const Icon = tab.icon;
                   const active = activeTab === tab.id;
                   return (
@@ -5417,7 +5635,7 @@ export function AdminStudioClient() {
             {/* ============================================================== */}
             {/* TAB: STANDARD ORDERS & INVENTORY FULFILLMENT TABLE             */}
             {/* ============================================================== */}
-            {activeTab === 'orders' && (
+            {activeTab === 'orders' && canAccessTab('orders') && (
               <div className="space-y-6">
                 {/* KPI Summary Bar */}
                 <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -5694,7 +5912,7 @@ export function AdminStudioClient() {
             {/* ============================================================== */}
             {/* TAB: USERS & ADMIN CREDENTIALS TRACKER                         */}
             {/* ============================================================== */}
-            {activeTab === 'users' && (
+            {activeTab === 'users' && authUser?.role === 'ADMIN' && (
               <div className="space-y-6">
                 {/* Admin Self-Credentials Update Card */}
                 <form
@@ -5998,18 +6216,103 @@ export function AdminStudioClient() {
                         </div>
                       </div>
 
-                      {/* Change Password Box for Selected User */}
-                      <div className="rounded-2xl border border-amber-500/25 bg-black/40 p-4">
-                        <label className="mb-1.5 block font-mono text-[10px] font-bold text-amber-300">
-                          SET / CHANGE ACCOUNT PASSWORD (LEAVE BLANK TO KEEP CURRENT)
-                        </label>
-                        <input
-                          type="password"
-                          value={userNewPassword}
-                          onChange={(e) => setUserNewPassword(e.target.value)}
-                          placeholder="Enter new password (min 6 characters)..."
-                          className="w-full rounded-xl border border-white/10 bg-[#0A0A0D] px-3.5 py-2 text-xs text-white placeholder:text-zinc-500"
-                        />
+                      {/* Current & Change Password Box for Selected User (Admin Only) */}
+                      <div className="space-y-3 rounded-2xl border border-amber-500/25 bg-black/40 p-4">
+                        <div>
+                          <div className="mb-1.5 flex items-center justify-between gap-2">
+                            <label className="font-mono text-[10px] font-bold text-emerald-300">
+                              CURRENT ACCOUNT PASSWORD
+                            </label>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setShowUserCurrentPassword((prev) => !prev)
+                                }
+                                className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-[#141418] px-2 py-1 font-mono text-[10px] text-zinc-300 hover:border-white/30 hover:text-white"
+                              >
+                                {showUserCurrentPassword ? (
+                                  <>
+                                    <EyeOff className="h-3 w-3" />
+                                    Hide
+                                  </>
+                                ) : (
+                                  <>
+                                    <Eye className="h-3 w-3" />
+                                    Show
+                                  </>
+                                )}
+                              </button>
+                              {selectedManagedUser.currentPassword && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (
+                                      typeof navigator !== 'undefined' &&
+                                      navigator.clipboard
+                                    ) {
+                                      navigator.clipboard.writeText(
+                                        selectedManagedUser.currentPassword || ''
+                                      );
+                                      setCopiedPasswordId(selectedManagedUser.id);
+                                      setTimeout(() => {
+                                        setCopiedPasswordId((prev) =>
+                                          prev === selectedManagedUser.id
+                                            ? null
+                                            : prev
+                                        );
+                                      }, 2000);
+                                    }
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-[#141418] px-2 py-1 font-mono text-[10px] text-zinc-300 hover:border-white/30 hover:text-white"
+                                >
+                                  <Copy className="h-3 w-3" />
+                                  {copiedPasswordId === selectedManagedUser.id
+                                    ? 'Copied'
+                                    : 'Copy'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#0A0A0D] px-3.5 py-2 font-mono text-xs text-white">
+                            <span>
+                              {selectedManagedUser.currentPassword
+                                ? showUserCurrentPassword
+                                  ? selectedManagedUser.currentPassword
+                                  : '•'.repeat(
+                                      Math.max(
+                                        8,
+                                        selectedManagedUser.currentPassword.length
+                                      )
+                                    )
+                                : 'Not recorded yet (Google / legacy account — set a new password below)'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="mb-1.5 block font-mono text-[10px] font-bold text-amber-300">
+                            SET / CHANGE ACCOUNT PASSWORD (LEAVE BLANK TO KEEP CURRENT)
+                          </label>
+                          <div className="relative">
+                            <input
+                              type={showUserNewPassword ? 'text' : 'password'}
+                              value={userNewPassword}
+                              onChange={(e) => setUserNewPassword(e.target.value)}
+                              placeholder="Enter new password (min 6 characters)..."
+                              className="w-full rounded-xl border border-white/10 bg-[#0A0A0D] px-3.5 py-2 pr-16 font-mono text-xs text-white placeholder:text-zinc-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setShowUserNewPassword((prev) => !prev)
+                              }
+                              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg border border-white/10 bg-[#141418] px-2 py-1 font-mono text-[10px] text-zinc-300 hover:text-white"
+                            >
+                              {showUserNewPassword ? 'Hide' : 'Show'}
+                            </button>
+                          </div>
+                        </div>
                       </div>
 
                       {/* Tracked Orders by This User */}
@@ -6045,9 +6348,146 @@ export function AdminStudioClient() {
             )}
 
             {/* ============================================================== */}
+            {/* TAB: ROLES & PERMISSIONS (ADMIN ONLY)                          */}
+            {/* ============================================================== */}
+            {activeTab === 'roles' && authUser?.role === 'ADMIN' && (
+              <div className="space-y-6 rounded-3xl border border-white/10 bg-[#121216] p-6">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+                  <div>
+                    <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-amber-300">
+                      ACCESS CONTROL MATRIX
+                    </p>
+                    <h2 className="mt-1 font-display text-xl font-bold text-white">
+                      Roles &amp; Editor Tab Permissions
+                    </h2>
+                    <p className="mt-1 text-xs text-zinc-400">
+                      Control which Admin Studio tabs the <strong className="text-white">EDITOR</strong> role can see and edit, or assign custom per-editor tab overrides. <strong className="text-zinc-300">Users &amp; Access</strong> and <strong className="text-zinc-300">Roles &amp; Permissions</strong> remain Admin-only.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={savingBusy}
+                    onClick={handleSaveRolePermissions}
+                    className="inline-flex items-center gap-2 rounded-xl bg-[#E11D48] px-4 py-2.5 font-mono text-[11px] font-bold uppercase tracking-wider text-white transition hover:bg-[#BE123C] disabled:opacity-50"
+                  >
+                    <Save className="h-3.5 w-3.5" />
+                    {savingBusy ? 'Saving...' : 'Save Role Permissions'}
+                  </button>
+                </div>
+
+                {/* Target Selector: Default Editor Role or Specific Editor Account */}
+                <div className="grid gap-4 rounded-2xl border border-white/10 bg-black/35 p-4 lg:grid-cols-[1.2fr_1fr]">
+                  <div>
+                    <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-zinc-400">
+                      CONFIGURE PERMISSIONS FOR
+                    </label>
+                    <select
+                      value={roleTargetKey}
+                      onChange={(e) => setRoleTargetKey(e.target.value)}
+                      className="w-full rounded-xl border border-white/10 bg-[#0A0A0D] px-3.5 py-2.5 font-mono text-xs text-white"
+                    >
+                      <option value="__DEFAULT_EDITOR__">
+                        Default EDITOR Role (applies to all Editors without override)
+                      </option>
+                      {editorUsers.map((ed) => {
+                        const emailKey = ed.email.trim().toLowerCase();
+                        const hasOverride = Boolean(
+                          rolePermissions.userTabOverrides[emailKey]
+                        );
+                        return (
+                          <option key={ed.id} value={emailKey}>
+                            Editor Account: {ed.name} ({ed.email})
+                            {hasOverride ? ' [Custom Override]' : ' [Using Default]'}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+
+                  <div className="flex flex-wrap items-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => applyRolePreset(DEFAULT_EDITOR_TABS)}
+                      className="rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-3 py-2 font-mono text-[11px] text-emerald-300 hover:bg-emerald-500/20"
+                    >
+                      Preset: Editing Tabs Only
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        applyRolePreset(ASSIGNABLE_ROLE_TABS.map((t) => t.id))
+                      }
+                      className="rounded-xl border border-white/15 bg-white/5 px-3 py-2 font-mono text-[11px] text-zinc-200 hover:bg-white/10"
+                    >
+                      Enable All Non-Admin Tabs
+                    </button>
+                    {roleTargetKey !== '__DEFAULT_EDITOR__' &&
+                      rolePermissions.userTabOverrides[roleTargetKey] && (
+                        <button
+                          type="button"
+                          onClick={() => resetEditorOverride(roleTargetKey)}
+                          className="rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 py-2 font-mono text-[11px] text-amber-300 hover:bg-amber-500/20"
+                        >
+                          Reset to Default Role
+                        </button>
+                      )}
+                  </div>
+                </div>
+
+                {/* Tab Checkboxes Grid */}
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {ASSIGNABLE_ROLE_TABS.map((tab) => {
+                    const checked = activeRoleTabList.includes(tab.id);
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => toggleRoleTab(tab.id)}
+                        className={`flex flex-col justify-between rounded-2xl border p-4 text-left transition ${
+                          checked
+                            ? 'border-emerald-500/45 bg-emerald-500/10 text-white'
+                            : 'border-white/10 bg-black/35 text-zinc-400 hover:border-white/25'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <span
+                              className={`inline-block rounded-full px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+                                tab.category === 'Editing'
+                                  ? 'bg-sky-500/15 text-sky-300'
+                                  : 'bg-amber-500/15 text-amber-300'
+                              }`}
+                            >
+                              {tab.category}
+                            </span>
+                            <p className="mt-2 font-mono text-xs font-bold text-white">
+                              {tab.label}
+                            </p>
+                          </div>
+                          <span
+                            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border font-mono text-[10px] ${
+                              checked
+                                ? 'border-emerald-400 bg-emerald-500 text-black'
+                                : 'border-white/20 bg-black/60 text-transparent'
+                            }`}
+                          >
+                            ✓
+                          </span>
+                        </div>
+                        <p className="mt-2 text-[11px] leading-relaxed text-zinc-400">
+                          {tab.description}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* ============================================================== */}
             {/* TAB: CONTACT DETAILS, WHATSAPP & CHATBOT CONFIGURATION         */}
             {/* ============================================================== */}
-            {activeTab === 'contact-chat' && (
+            {activeTab === 'contact-chat' && canAccessTab('contact-chat') && (
               <form
                 onSubmit={handleSaveContactSettings}
                 className="space-y-6 rounded-3xl border border-white/10 bg-[#121216] p-6"
