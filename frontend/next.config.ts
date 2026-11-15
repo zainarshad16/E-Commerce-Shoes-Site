@@ -24,6 +24,14 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'images.unsplash.com',
       },
+      {
+        protocol: 'https',
+        hostname: 'backend-six-alpha-26.vercel.app',
+      },
+      {
+        protocol: 'https',
+        hostname: 'atelier-vance-storefront.vercel.app',
+      },
     ],
   },
   async headers() {
